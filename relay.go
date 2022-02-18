@@ -34,7 +34,7 @@ func main() {
 		return
 	}
 
-	handle, err := pcap.OpenLive("ens37", 1024, false, pcap.BlockForever)
+	handle, err := pcap.OpenLive("ens37", 65535, false, pcap.BlockForever)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -77,7 +77,11 @@ func OutwardHandler(conn net.PacketConn) {
 				fmt.Println(err)
 				return
 			}
-			conn.WriteTo(payload, dst)
+			n, err := conn.WriteTo(payload, dst)
+			if err != nil {
+				fmt.Println(n, err)
+				return
+			}
 		}()
 	}
 }
