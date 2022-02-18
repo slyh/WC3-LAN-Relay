@@ -55,8 +55,9 @@ func InwardHandler(conn net.PacketConn, handle *pcap.Handle, ifName string) {
 		}
 
 		payload := buffer[:n]
-		inward <- payload
-		fmt.Print("-> ", src, string(payload))
+		_ = src
+		// inward <- payload
+		// fmt.Print("\n-> ", src, string(payload))
 		go SendIPv4(handle, ifName, payload)
 	}
 }

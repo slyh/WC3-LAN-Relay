@@ -3,8 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/google/gopacket"
@@ -13,11 +13,13 @@ import (
 )
 
 var arpMap = make(map[string][]uint8)
+var arpMapLock sync.Mutex
 
 var port2IpMap = make(map[uint16]Addr)
 var rewriteMap = make(map[string]Addr)
-var rewriteAddr = []uint8{192, 168, 51, 37}
+var rewriteAddr = []uint8{192, 168, 51, 57}
 var rewritePortCounter = uint16(20000)
+var rewriteMapLock sync.Mutex
 
 type Addr struct {
 	IP   []uint8
@@ -52,15 +54,15 @@ func ParsePacket(handle *pcap.Handle, ifName string) {
 
 		if bytes.Equal(ethernet.SrcMAC, iface.HardwareAddr) {
 			// Ignore packets from myself
-			return
+			continue
 		}
 
 		if packet.Layer(layers.LayerTypeIPv4) != nil && (packet.Layer(layers.LayerTypeTCP) != nil || packet.Layer(layers.LayerTypeUDP) != nil) {
-			ReadIPv4(packet, iface)
+			go ReadIPv4(packet, iface)
 		}
 
 		if packet.Layer(layers.LayerTypeARP) != nil {
-			ReadARP(packet)
+			go ReadARP(packet)
 		}
 	}
 }
@@ -115,7 +117,7 @@ func ReadIPv4(packet gopacket.Packet, iface *net.Interface) {
 	}
 	payload := buffer.Bytes()
 	outward <- payload
-	log.Printf("<-", string(payload))
+	// log.Printf("\n<-", string(payload))
 }
 
 func SendIPv4(handle *pcap.Handle, ifName string, raw []uint8) {
@@ -129,6 +131,7 @@ func SendIPv4(handle *pcap.Handle, ifName string, raw []uint8) {
 	packet := gopacket.NewPacket(raw, layers.LayerTypeEthernet, decodeOptions)
 
 	if packet.Layer(layers.LayerTypeIPv4) == nil || (packet.Layer(layers.LayerTypeTCP) == nil && packet.Layer(layers.LayerTypeUDP) == nil) {
+		fmt.Println("Unknown layer")
 		return
 	}
 
@@ -146,8 +149,11 @@ func SendIPv4(handle *pcap.Handle, ifName string, raw []uint8) {
 		dstPort = uint16(udp.DstPort)
 	}
 
+	rewriteMapLock.Lock()
 	dstAddr, ok := port2IpMap[dstPort]
+	rewriteMapLock.Unlock()
 	if !ok {
+		// fmt.Println("Dst Addr not found", dstPort)
 		return
 	}
 
@@ -156,14 +162,15 @@ func SendIPv4(handle *pcap.Handle, ifName string, raw []uint8) {
 	ipv4.SrcIP[2] = 1
 	ipv4.DstIP = dstAddr.IP
 
-	dstMAC, ok := arpMap[dstAddr.IPString()]
+	dstMAC, ok := ReadARPMap(dstAddr.IPString())
 	if ipv4.DstIP.String() == "255.255.255.255" {
 		dstMAC = []uint8{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	} else if !ok {
 		SendARP(handle, iface, dstAddr.IP)
 		time.Sleep(1 * time.Second)
-		dstMAC, ok = arpMap[dstAddr.IPString()]
+		dstMAC, ok = ReadARPMap(dstAddr.IPString())
 		if !ok {
+			fmt.Println("Dst MAC not found", ipv4.DstIP.String())
 			return
 		}
 	}
@@ -182,12 +189,14 @@ func SendIPv4(handle *pcap.Handle, ifName string, raw []uint8) {
 
 	if packet.Layer(layers.LayerTypeTCP) != nil {
 		tcp := packet.Layer(layers.LayerTypeTCP).(*layers.TCP)
+		tcp.DstPort = layers.TCPPort(dstAddr.Port)
 		tcp.SetNetworkLayerForChecksum(ipv4)
 		gopacket.SerializeLayers(buf, opts, &ethernet, ipv4, tcp, gopacket.Payload(tcp.Payload))
 	}
 
 	if packet.Layer(layers.LayerTypeUDP) != nil {
 		udp := packet.Layer(layers.LayerTypeUDP).(*layers.UDP)
+		udp.DstPort = layers.UDPPort(dstAddr.Port)
 		udp.SetNetworkLayerForChecksum(ipv4)
 		gopacket.SerializeLayers(buf, opts, &ethernet, ipv4, udp, gopacket.Payload(udp.Payload))
 	}
@@ -240,11 +249,21 @@ func SendARP(handle *pcap.Handle, iface *net.Interface, dstIp net.IP) {
 	}
 }
 
+func ReadARPMap(ip string) (mac []uint8, ok bool) {
+	arpMapLock.Lock()
+	mac, ok = arpMap[ip]
+	arpMapLock.Unlock()
+	return
+}
+
 func UpdateARPMap(ip net.IP, mac []uint8) {
+	arpMapLock.Lock()
 	arpMap[ip.String()] = mac
+	arpMapLock.Unlock()
 }
 
 func GetRewroteSrcAddr(addr Addr) (newAddr Addr) {
+	rewriteMapLock.Lock()
 	newAddr, ok := rewriteMap[addr.String()]
 	if !ok {
 		newAddr = Addr{
@@ -255,6 +274,7 @@ func GetRewroteSrcAddr(addr Addr) (newAddr Addr) {
 		rewriteMap[addr.String()] = newAddr
 		rewritePortCounter++
 	}
+	rewriteMapLock.Unlock()
 	return
 }
 
