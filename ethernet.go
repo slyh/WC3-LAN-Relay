@@ -49,6 +49,7 @@ func ParsePacket(handle *pcap.Handle, ifName string) {
 		}
 
 		ethernet := packet.Layer(layers.LayerTypeEthernet).(*layers.Ethernet)
+
 		if bytes.Equal(ethernet.SrcMAC, iface.HardwareAddr) {
 			// Ignore packets from myself
 			return
@@ -125,13 +126,14 @@ func SendIPv4(handle *pcap.Handle, ifName string, raw []uint8) {
 	}
 
 	decodeOptions := gopacket.DecodeOptions{}
-	packet := gopacket.NewPacket(raw, layers.LayerTypeIPv4, decodeOptions)
+	packet := gopacket.NewPacket(raw, layers.LayerTypeEthernet, decodeOptions)
 
 	if packet.Layer(layers.LayerTypeIPv4) == nil || (packet.Layer(layers.LayerTypeTCP) == nil && packet.Layer(layers.LayerTypeUDP) == nil) {
 		return
 	}
 
 	ipv4 := packet.Layer(layers.LayerTypeIPv4).(*layers.IPv4)
+
 	dstPort := uint16(0)
 
 	if packet.Layer(layers.LayerTypeTCP) != nil {
@@ -155,7 +157,9 @@ func SendIPv4(handle *pcap.Handle, ifName string, raw []uint8) {
 	ipv4.DstIP = dstAddr.IP
 
 	dstMAC, ok := arpMap[dstAddr.IPString()]
-	if !ok {
+	if ipv4.DstIP.String() == "255.255.255.255" {
+		dstMAC = []uint8{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+	} else if !ok {
 		SendARP(handle, iface, dstAddr.IP)
 		time.Sleep(1 * time.Second)
 		dstMAC, ok = arpMap[dstAddr.IPString()]
@@ -178,12 +182,14 @@ func SendIPv4(handle *pcap.Handle, ifName string, raw []uint8) {
 
 	if packet.Layer(layers.LayerTypeTCP) != nil {
 		tcp := packet.Layer(layers.LayerTypeTCP).(*layers.TCP)
-		gopacket.SerializeLayers(buf, opts, &ethernet, ipv4, tcp)
+		tcp.SetNetworkLayerForChecksum(ipv4)
+		gopacket.SerializeLayers(buf, opts, &ethernet, ipv4, tcp, gopacket.Payload(tcp.Payload))
 	}
 
 	if packet.Layer(layers.LayerTypeUDP) != nil {
 		udp := packet.Layer(layers.LayerTypeUDP).(*layers.UDP)
-		gopacket.SerializeLayers(buf, opts, &ethernet, ipv4, udp)
+		udp.SetNetworkLayerForChecksum(ipv4)
+		gopacket.SerializeLayers(buf, opts, &ethernet, ipv4, udp, gopacket.Payload(udp.Payload))
 	}
 
 	handle.WritePacketData(buf.Bytes())
