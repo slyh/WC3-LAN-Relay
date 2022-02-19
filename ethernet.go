@@ -104,6 +104,37 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 
 	buffer := gopacket.NewSerializeBuffer()
 
+	if config.Role == config.ROLE_SERVER {
+		dstPort := uint16(0)
+
+		if tcp != nil {
+			dstPort = uint16(tcp.DstPort)
+		}
+
+		if udp != nil {
+			dstPort = uint16(udp.DstPort)
+		}
+
+		rewriteMapLock.Lock()
+		dstAddr, ok := port2IpMap[dstPort]
+		rewriteMapLock.Unlock()
+
+		if !ok {
+			// fmt.Println("Dst Addr not found", dstPort)
+			return
+		}
+
+		ipv4.DstIP = dstAddr.IP
+
+		if tcp != nil {
+			tcp.DstPort = layers.TCPPort(dstAddr.Port)
+		}
+
+		if udp != nil {
+			udp.DstPort = layers.UDPPort(dstAddr.Port)
+		}
+	}
+
 	if tcp != nil {
 		err := tcp.SetNetworkLayerForChecksum(ipv4)
 		if err != nil {
@@ -184,33 +215,19 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 	var tcp *layers.TCP = nil
 	var udp *layers.UDP = nil
 
-	dstPort := uint16(0)
-
 	if tcpLayer != nil {
 		tcp = tcpLayer.(*layers.TCP)
-		dstPort = uint16(tcp.DstPort)
 	}
 
 	if udpLayer != nil {
 		udp = udpLayer.(*layers.UDP)
-		dstPort = uint16(udp.DstPort)
 	}
 
-	rewriteMapLock.Lock()
-	dstAddr, ok := port2IpMap[dstPort]
-	rewriteMapLock.Unlock()
-
 	if config.Role == config.ROLE_CLIENT {
-		if !ok {
-			// fmt.Println("Dst Addr not found", dstPort)
-			return
-		}
-
 		localNetwork := config.Servers[serverIndex].LocalNetworkByte
 		for i, _ := range ipv4.SrcIP {
 			ipv4.SrcIP[i] = (ipv4.SrcIP[i] & localNetwork.Mask[i]) | (localNetwork.IP[i] &^ localNetwork.Mask[i])
 		}
-		ipv4.DstIP = dstAddr.IP
 	}
 
 	if config.Role == config.ROLE_SERVER {
@@ -262,10 +279,6 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 	buffer := gopacket.NewSerializeBuffer()
 
 	if tcp != nil {
-		if config.Role == config.ROLE_CLIENT {
-			tcp.DstPort = layers.TCPPort(dstAddr.Port)
-		}
-
 		err := tcp.SetNetworkLayerForChecksum(ipv4)
 		if err != nil {
 			fmt.Println(err)
@@ -280,10 +293,6 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 	}
 
 	if udp != nil {
-		if config.Role == config.ROLE_CLIENT {
-			udp.DstPort = layers.UDPPort(dstAddr.Port)
-		}
-
 		err := udp.SetNetworkLayerForChecksum(ipv4)
 		if err != nil {
 			fmt.Println(err)
