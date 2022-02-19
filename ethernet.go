@@ -44,8 +44,6 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 			copy(rewriteMask, addrs[0].(*net.IPNet).Mask)
 		}
 
-		fmt.Println("DEBUG", rewriteAddr, rewriteMask)
-
 		rewritePortCounter = uint16(config.NATSourcePortStart)
 
 		fmt.Printf("NAT IP: %d.%d.%d.%d\n", rewriteAddr[0], rewriteAddr[1], rewriteAddr[2], rewriteAddr[3])
