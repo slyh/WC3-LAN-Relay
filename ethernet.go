@@ -97,35 +97,6 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 }
 
 func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp *layers.UDP, iface *net.Interface) {
-	if config.Role == config.ROLE_SERVER {
-		if tcp != nil {
-			srcAddr := Addr{
-				IP:   ipv4.SrcIP,
-				Port: uint16(tcp.SrcPort),
-			}
-			newSrcAddr := GetRewroteSrcAddr(srcAddr)
-			ipv4.SrcIP = newSrcAddr.IP
-			tcp.SrcPort = layers.TCPPort(newSrcAddr.Port)
-		}
-
-		if udp != nil {
-			srcAddr := Addr{
-				IP:   ipv4.SrcIP,
-				Port: uint16(udp.SrcPort),
-			}
-			newSrcAddr := GetRewroteSrcAddr(srcAddr)
-			ipv4.SrcIP = newSrcAddr.IP
-			udp.SrcPort = layers.UDPPort(newSrcAddr.Port)
-		}
-
-		// if ipv4.DstIP.String() != "255.255.255.255" {
-		// 	// Rewrite dst ip to vlan subnet
-		// 	ipv4.DstIP[0] = 192
-		// 	ipv4.DstIP[1] = 168
-		// 	ipv4.DstIP[2] = 51
-		// }
-	}
-
 	serializeOptions := gopacket.SerializeOptions{
 		FixLengths:       true,
 		ComputeChecksums: true,
@@ -170,16 +141,23 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 	payload := buffer.Bytes()
 
 	if config.Role == config.ROLE_CLIENT {
-		var serverIndex = -1
-		for index, server := range config.Servers {
-			if server.LocalNetworkByte.Contains(ipv4.DstIP) {
-				serverIndex = index
+		if ipv4.DstIP.String() == "255.255.255.255" {
+			for i, _ := range queueList {
+				queueList[i] <- payload
 			}
-		}
-		if serverIndex == -1 {
-			fmt.Println("No suitable remote.", ipv4.DstIP)
 		} else {
-			queueList[serverIndex] <- payload
+			var serverIndex = -1
+			for index, server := range config.Servers {
+				if server.LocalNetworkByte.Contains(ipv4.DstIP) {
+					serverIndex = index
+				}
+			}
+
+			if serverIndex == -1 {
+				fmt.Println("No suitable remote:", ipv4.DstIP)
+			} else {
+				queueList[serverIndex] <- payload
+			}
 		}
 	} else {
 		outward <- payload
@@ -233,6 +211,28 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			ipv4.SrcIP[i] = (ipv4.SrcIP[i] & localNetwork.Mask[i]) | (localNetwork.IP[i] &^ localNetwork.Mask[i])
 		}
 		ipv4.DstIP = dstAddr.IP
+	}
+
+	if config.Role == config.ROLE_SERVER {
+		if tcp != nil {
+			srcAddr := Addr{
+				IP:   ipv4.SrcIP,
+				Port: uint16(tcp.SrcPort),
+			}
+			newSrcAddr := GetRewroteSrcAddr(srcAddr)
+			ipv4.SrcIP = newSrcAddr.IP
+			tcp.SrcPort = layers.TCPPort(newSrcAddr.Port)
+		}
+
+		if udp != nil {
+			srcAddr := Addr{
+				IP:   ipv4.SrcIP,
+				Port: uint16(udp.SrcPort),
+			}
+			newSrcAddr := GetRewroteSrcAddr(srcAddr)
+			ipv4.SrcIP = newSrcAddr.IP
+			udp.SrcPort = layers.UDPPort(newSrcAddr.Port)
+		}
 	}
 
 	dstMAC, ok := ReadARPMap(ipv4.DstIP.String())
