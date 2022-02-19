@@ -1,0 +1,17 @@
+{
+  "Bind": "192.168.99.2:7112",
+  "Client": "192.168.99.2:7112",
+  "NATSourcePortStart": 10000,
+  "NATSourcePortEnd": 30000,
+  "Role": 1,
+  "Servers": [
+    {
+      "Remote": "192.168.99.1:7112",
+      "LocalNetwork": "10.200.3.0/24"
+    }
+  ],
+  "WC3Interface": "ens37",
+  "PCAPInterface": "ens37",
+  "ROLE_SERVER": 0,
+  "ROLE_CLIENT": 1
+}

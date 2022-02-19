@@ -3,18 +3,28 @@ package main
 import (
 	"fmt"
 	"net"
-	"sync"
 
 	"github.com/google/gopacket/pcap"
 )
 
-var wg sync.WaitGroup
-
-// var inward = make(chan []uint8, 10)
+var config ConfigType
+var queueList []chan []uint8
 var outward = make(chan []uint8, 100)
 
 func main() {
-	addr, err := net.ResolveUDPAddr("udp", "192.168.99.2:16112")
+	var err error
+	config, err = ReadConfigFile("config.json")
+	if err != nil {
+		fmt.Println("Failed to read config file. ", err)
+		return
+	}
+
+	queueList = make([]chan []uint8, len(config.Servers))
+	for index, _ := range queueList {
+		queueList[index] = make(chan []uint8, 100)
+	}
+
+	addr, err := net.ResolveUDPAddr("udp", config.Bind)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -28,13 +38,13 @@ func main() {
 
 	fmt.Println("Listening on", conn.LocalAddr())
 
-	iface, err := net.InterfaceByName("ens37")
+	iface, err := net.InterfaceByName(config.WC3Interface)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	handle, err := pcap.OpenLive("ens37", 65535, false, pcap.BlockForever)
+	handle, err := pcap.OpenLive(config.PCAPInterface, 65535, false, pcap.BlockForever)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -44,13 +54,24 @@ func main() {
 	go ParsePacket(handle, iface)
 
 	go InwardHandler(conn, handle, iface)
-	go OutwardHandler(conn)
+	if config.Role == config.ROLE_CLIENT {
+		for index, _ := range queueList {
+			go OutwardHandler(conn, queueList[index], config.Servers[index].Remote)
+		}
+	} else {
+		go OutwardHandler(conn, outward, config.Client)
+	}
 
-	wg.Add(1)
-	wg.Wait()
+	wait := make(chan int)
+	<-wait
 }
 
 func InwardHandler(conn net.PacketConn, handle *pcap.Handle, iface *net.Interface) {
+	src2Index := make(map[string]int)
+	for index, server := range config.Servers {
+		src2Index[server.Remote] = index
+	}
+
 	buffer := make([]byte, 65535)
 	for {
 		n, src, err := conn.ReadFrom(buffer)
@@ -61,17 +82,19 @@ func InwardHandler(conn net.PacketConn, handle *pcap.Handle, iface *net.Interfac
 		}
 
 		payload := buffer[:n]
-		_ = src
-		// inward <- payload
-		// fmt.Print("\n-> ", src, string(payload))
-		SendIPv4(handle, iface, payload, true)
+
+		if config.Role == config.ROLE_SERVER {
+			SendIPv4(handle, iface, payload, 0)
+		} else {
+			SendIPv4(handle, iface, payload, src2Index[src.String()])
+		}
 	}
 }
 
-func OutwardHandler(conn net.PacketConn) {
-	dst, err := net.ResolveUDPAddr("udp", "192.168.99.1:16112")
+func OutwardHandler(conn net.PacketConn, queue chan []uint8, remote string) {
+	dst, err := net.ResolveUDPAddr("udp", remote)
 	for {
-		payload := <-outward
+		payload := <-queue
 		if err != nil {
 			fmt.Println(err)
 			return

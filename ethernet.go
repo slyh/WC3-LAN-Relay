@@ -17,6 +17,7 @@ var arpMapLock sync.Mutex
 
 var port2IpMap = make(map[uint16]Addr)
 var rewriteMap = make(map[string]Addr)
+
 var rewriteAddr = []uint8{192, 168, 51, 49}
 var rewritePortCounter = uint16(20000)
 var rewriteMapLock sync.Mutex
@@ -31,6 +32,22 @@ func (addr Addr) String() string {
 }
 
 func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
+	if config.Role == config.ROLE_SERVER {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if len(addrs) > 0 {
+			copy(rewriteAddr, addrs[0].(*net.IPNet).IP.To4())
+		}
+
+		rewritePortCounter = uint16(config.NATSourcePortStart)
+
+		fmt.Printf("NAT IP: %d.%d.%d.%d\n", rewriteAddr[0], rewriteAddr[1], rewriteAddr[2], rewriteAddr[3])
+		fmt.Printf("NAT Ports: %d - %d\n", rewritePortCounter, config.NATSourcePortEnd)
+	}
+
 	src := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
 	in := src.Packets()
 	for {
@@ -58,11 +75,11 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 			UpdateARPMap(ipv4.SrcIP, ethernet.SrcMAC)
 			if tcpLayer != nil {
 				tcp := tcpLayer.(*layers.TCP)
-				ReadIPv4(packet, ethernet, ipv4, tcp, nil, iface, true)
+				ReadIPv4(packet, ethernet, ipv4, tcp, nil, iface)
 			}
 			if udpLayer != nil {
 				udp := udpLayer.(*layers.UDP)
-				go ReadIPv4(packet, ethernet, ipv4, nil, udp, iface, true)
+				go ReadIPv4(packet, ethernet, ipv4, nil, udp, iface)
 			}
 			continue
 		}
@@ -79,8 +96,8 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 	}
 }
 
-func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp *layers.UDP, iface *net.Interface, nat bool) {
-	if nat {
+func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp *layers.UDP, iface *net.Interface) {
+	if config.Role == config.ROLE_SERVER {
 		if tcp != nil {
 			srcAddr := Addr{
 				IP:   ipv4.SrcIP,
@@ -101,12 +118,12 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 			udp.SrcPort = layers.UDPPort(newSrcAddr.Port)
 		}
 
-		if ipv4.DstIP.String() != "255.255.255.255" {
-			// Rewrite dst ip to vlan subnet
-			ipv4.DstIP[0] = 192
-			ipv4.DstIP[1] = 168
-			ipv4.DstIP[2] = 51
-		}
+		// if ipv4.DstIP.String() != "255.255.255.255" {
+		// 	// Rewrite dst ip to vlan subnet
+		// 	ipv4.DstIP[0] = 192
+		// 	ipv4.DstIP[1] = 168
+		// 	ipv4.DstIP[2] = 51
+		// }
 	}
 
 	serializeOptions := gopacket.SerializeOptions{
@@ -151,11 +168,27 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 	// }
 
 	payload := buffer.Bytes()
-	outward <- payload
+
+	if config.Role == config.ROLE_CLIENT {
+		var serverIndex = -1
+		for index, server := range config.Servers {
+			if server.LocalNetworkByte.Contains(ipv4.DstIP) {
+				serverIndex = index
+			}
+		}
+		if serverIndex == -1 {
+			fmt.Println("No suitable remote.", ipv4.DstIP)
+		} else {
+			queueList[serverIndex] <- payload
+		}
+	} else {
+		outward <- payload
+	}
+
 	// log.Printf("\n<-", string(payload))
 }
 
-func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) {
+func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverIndex int) {
 	decodeOptions := gopacket.DecodeOptions{}
 	packet := gopacket.NewPacket(raw, layers.LayerTypeEthernet, decodeOptions)
 
@@ -189,15 +222,16 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 	dstAddr, ok := port2IpMap[dstPort]
 	rewriteMapLock.Unlock()
 
-	if nat {
+	if config.Role == config.ROLE_CLIENT {
 		if !ok {
 			// fmt.Println("Dst Addr not found", dstPort)
 			return
 		}
 
-		ipv4.SrcIP[0] = 10
-		ipv4.SrcIP[1] = 200
-		ipv4.SrcIP[2] = 1
+		localNetwork := config.Servers[serverIndex].LocalNetworkByte
+		for i, _ := range ipv4.SrcIP {
+			ipv4.SrcIP[i] = (ipv4.SrcIP[i] & localNetwork.Mask[i]) | (localNetwork.IP[i] &^ localNetwork.Mask[i])
+		}
 		ipv4.DstIP = dstAddr.IP
 	}
 
@@ -228,7 +262,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 	buffer := gopacket.NewSerializeBuffer()
 
 	if tcp != nil {
-		if nat {
+		if config.Role == config.ROLE_CLIENT {
 			tcp.DstPort = layers.TCPPort(dstAddr.Port)
 		}
 
@@ -246,7 +280,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 	}
 
 	if udp != nil {
-		if nat {
+		if config.Role == config.ROLE_CLIENT {
 			udp.DstPort = layers.UDPPort(dstAddr.Port)
 		}
 
