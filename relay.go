@@ -10,7 +10,7 @@ import (
 
 var wg sync.WaitGroup
 
-var inward = make(chan []uint8, 10)
+// var inward = make(chan []uint8, 10)
 var outward = make(chan []uint8, 10)
 
 func main() {
@@ -72,16 +72,15 @@ func OutwardHandler(conn net.PacketConn) {
 	dst, err := net.ResolveUDPAddr("udp", "192.168.99.1:16112")
 	for {
 		payload := <-outward
-		go func() {
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			n, err := conn.WriteTo(payload, dst)
-			if err != nil {
-				fmt.Println(n, err)
-				return
-			}
-		}()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		n, err := conn.WriteTo(payload, dst)
+		if err != nil {
+			fmt.Println(n, err)
+			return
+		}
 	}
 }

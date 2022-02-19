@@ -17,17 +17,13 @@ var arpMapLock sync.Mutex
 
 var port2IpMap = make(map[uint16]Addr)
 var rewriteMap = make(map[string]Addr)
-var rewriteAddr = []uint8{192, 168, 51, 126}
+var rewriteAddr = []uint8{192, 168, 51, 49}
 var rewritePortCounter = uint16(20000)
 var rewriteMapLock sync.Mutex
 
 type Addr struct {
-	IP   []uint8
+	IP   net.IP
 	Port uint16
-}
-
-func (addr Addr) IPString() string {
-	return fmt.Sprintf("%d.%d.%d.%d", addr.IP[0], addr.IP[1], addr.IP[2], addr.IP[3])
 }
 
 func (addr Addr) String() string {
@@ -116,11 +112,19 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 	}
 
 	if tcp != nil {
-		tcp.SetNetworkLayerForChecksum(ipv4)
+		err := tcp.SetNetworkLayerForChecksum(ipv4)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 
 	if udp != nil {
-		udp.SetNetworkLayerForChecksum(ipv4)
+		err := udp.SetNetworkLayerForChecksum(ipv4)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 
 	buffer := gopacket.NewSerializeBuffer()
@@ -138,10 +142,12 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 	decodeOptions := gopacket.DecodeOptions{}
 	packet := gopacket.NewPacket(raw, layers.LayerTypeEthernet, decodeOptions)
 
+	ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
 	ipv4Layer := packet.Layer(layers.LayerTypeIPv4)
 	tcpLayer := packet.Layer(layers.LayerTypeTCP)
 	udpLayer := packet.Layer(layers.LayerTypeUDP)
-	if ipv4Layer == nil || (tcpLayer == nil && udpLayer == nil) {
+
+	if ethernetLayer == nil || ipv4Layer == nil || (tcpLayer == nil && udpLayer == nil) {
 		fmt.Println("Unknown layer")
 		return
 	}
@@ -182,6 +188,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 	if ipv4.DstIP.String() == "255.255.255.255" {
 		dstMAC = []uint8{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	} else if !ok {
+		fmt.Println("Sending ARP request", ipv4.DstIP.String())
 		SendARP(handle, iface, ipv4.DstIP)
 		time.Sleep(1 * time.Second)
 		dstMAC, ok = ReadARPMap(ipv4.DstIP.String())
@@ -191,24 +198,16 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 		}
 	}
 
-	ethernet := layers.Ethernet{
-		SrcMAC:       iface.HardwareAddr,
-		DstMAC:       dstMAC,
-		EthernetType: layers.EthernetTypeIPv4,
-	}
-
-	buf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{
-		FixLengths:       true,
-		ComputeChecksums: true,
-	}
+	ethernet := ethernetLayer.(*layers.Ethernet)
+	ethernet.SrcMAC = iface.HardwareAddr
+	ethernet.DstMAC = dstMAC
+	ethernet.EthernetType = layers.EthernetTypeIPv4
 
 	if tcp != nil {
 		if nat {
 			tcp.DstPort = layers.TCPPort(dstAddr.Port)
 		}
 		tcp.SetNetworkLayerForChecksum(ipv4)
-		gopacket.SerializeLayers(buf, opts, &ethernet, ipv4, tcp, gopacket.Payload(tcp.Payload))
 	}
 
 	if udp != nil {
@@ -216,10 +215,25 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 			udp.DstPort = layers.UDPPort(dstAddr.Port)
 		}
 		udp.SetNetworkLayerForChecksum(ipv4)
-		gopacket.SerializeLayers(buf, opts, &ethernet, ipv4, udp, gopacket.Payload(udp.Payload))
 	}
 
-	handle.WritePacketData(buf.Bytes())
+	serializeOptions := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+
+	buffer := gopacket.NewSerializeBuffer()
+	err := gopacket.SerializePacket(buffer, serializeOptions, packet)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	err = handle.WritePacketData(buffer.Bytes())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }
 
 func ReadARP(arp *layers.ARP) {
