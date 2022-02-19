@@ -77,11 +77,6 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 }
 
 func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp *layers.UDP, iface *net.Interface, nat bool) {
-	serializeOptions := gopacket.SerializeOptions{
-		FixLengths:       true,
-		ComputeChecksums: true,
-	}
-
 	if nat {
 		if tcp != nil {
 			srcAddr := Addr{
@@ -111,8 +106,21 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 		}
 	}
 
+	serializeOptions := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+
+	buffer := gopacket.NewSerializeBuffer()
+
 	if tcp != nil {
 		err := tcp.SetNetworkLayerForChecksum(ipv4)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, tcp)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -125,14 +133,20 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 			fmt.Println(err)
 			return
 		}
+
+		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, udp)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 
-	buffer := gopacket.NewSerializeBuffer()
-	err := gopacket.SerializePacket(buffer, serializeOptions, packet)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	// err := gopacket.SerializePacket(buffer, serializeOptions, packet)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+
 	payload := buffer.Bytes()
 	outward <- payload
 	// log.Printf("\n<-", string(payload))
@@ -203,33 +217,56 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 	ethernet.DstMAC = dstMAC
 	ethernet.EthernetType = layers.EthernetTypeIPv4
 
-	if tcp != nil {
-		if nat {
-			tcp.DstPort = layers.TCPPort(dstAddr.Port)
-		}
-		tcp.SetNetworkLayerForChecksum(ipv4)
-	}
-
-	if udp != nil {
-		if nat {
-			udp.DstPort = layers.UDPPort(dstAddr.Port)
-		}
-		udp.SetNetworkLayerForChecksum(ipv4)
-	}
-
 	serializeOptions := gopacket.SerializeOptions{
 		FixLengths:       true,
 		ComputeChecksums: true,
 	}
 
 	buffer := gopacket.NewSerializeBuffer()
-	err := gopacket.SerializePacket(buffer, serializeOptions, packet)
-	if err != nil {
-		fmt.Println(err)
-		return
+
+	if tcp != nil {
+		if nat {
+			tcp.DstPort = layers.TCPPort(dstAddr.Port)
+		}
+
+		err := tcp.SetNetworkLayerForChecksum(ipv4)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, tcp)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 
-	err = handle.WritePacketData(buffer.Bytes())
+	if udp != nil {
+		if nat {
+			udp.DstPort = layers.UDPPort(dstAddr.Port)
+		}
+
+		err := udp.SetNetworkLayerForChecksum(ipv4)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, udp)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+
+	// err := gopacket.SerializePacket(buffer, serializeOptions, packet)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+
+	err := handle.WritePacketData(buffer.Bytes())
 	if err != nil {
 		fmt.Println(err)
 		return
