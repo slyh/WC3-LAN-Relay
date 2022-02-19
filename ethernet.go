@@ -38,6 +38,7 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
 
 		if ethernetLayer == nil {
+			fmt.Println("ParsePacket: No ethernet layer")
 			continue
 		}
 
@@ -73,6 +74,8 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 			go ReadARP(arp)
 			continue
 		}
+
+		fmt.Println("ParsePacket: No wanted layer")
 	}
 }
 
