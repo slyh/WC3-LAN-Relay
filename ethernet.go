@@ -19,6 +19,7 @@ var port2IpMap = make(map[uint16]Addr)
 var rewriteMap = make(map[string]Addr)
 
 var rewriteAddr = []uint8{192, 168, 51, 49}
+var rewriteMask = []uint8{255, 255, 255, 0}
 var rewritePortCounter = uint16(20000)
 var rewriteMapLock sync.Mutex
 
@@ -40,7 +41,10 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		}
 		if len(addrs) > 0 {
 			copy(rewriteAddr, addrs[0].(*net.IPNet).IP.To4())
+			copy(rewriteMask, addrs[0].(*net.IPNet).Mask)
 		}
+
+		fmt.Println("DEBUG", rewriteAddr, rewriteMask)
 
 		rewritePortCounter = uint16(config.NATSourcePortStart)
 
@@ -226,7 +230,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 	if config.Role == config.ROLE_CLIENT {
 		localNetwork := config.Servers[serverIndex].LocalNetworkByte
 		for i, _ := range ipv4.SrcIP {
-			ipv4.SrcIP[i] = (ipv4.SrcIP[i] & localNetwork.Mask[i]) | (localNetwork.IP[i] &^ localNetwork.Mask[i])
+			ipv4.SrcIP[i] = (ipv4.SrcIP[i] &^ localNetwork.Mask[i]) | (localNetwork.IP[i] & localNetwork.Mask[i])
 		}
 	}
 
@@ -249,6 +253,10 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			newSrcAddr := GetRewroteSrcAddr(srcAddr)
 			ipv4.SrcIP = newSrcAddr.IP
 			udp.SrcPort = layers.UDPPort(newSrcAddr.Port)
+		}
+
+		for i, _ := range ipv4.DstIP {
+			ipv4.DstIP[i] = (ipv4.DstIP[i] &^ rewriteMask[i]) | (rewriteAddr[i] & rewriteMask[i])
 		}
 	}
 
