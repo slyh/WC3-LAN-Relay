@@ -255,8 +255,10 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			udp.SrcPort = layers.UDPPort(newSrcAddr.Port)
 		}
 
-		for i, _ := range ipv4.DstIP {
-			ipv4.DstIP[i] = (ipv4.DstIP[i] &^ rewriteMask[i]) | (rewriteAddr[i] & rewriteMask[i])
+		if ipv4.DstIP.String() != "255.255.255.255" {
+			for i, _ := range ipv4.DstIP {
+				ipv4.DstIP[i] = (ipv4.DstIP[i] &^ rewriteMask[i]) | (rewriteAddr[i] & rewriteMask[i])
+			}
 		}
 	}
 
