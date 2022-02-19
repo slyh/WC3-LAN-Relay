@@ -11,7 +11,7 @@ import (
 var wg sync.WaitGroup
 
 // var inward = make(chan []uint8, 10)
-var outward = make(chan []uint8, 10)
+var outward = make(chan []uint8, 100)
 
 func main() {
 	addr, err := net.ResolveUDPAddr("udp", "192.168.99.2:16112")
@@ -64,7 +64,7 @@ func InwardHandler(conn net.PacketConn, handle *pcap.Handle, iface *net.Interfac
 		_ = src
 		// inward <- payload
 		// fmt.Print("\n-> ", src, string(payload))
-		go SendIPv4(handle, iface, payload, true)
+		SendIPv4(handle, iface, payload, true)
 	}
 }
 

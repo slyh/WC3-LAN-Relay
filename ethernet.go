@@ -58,7 +58,7 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 			UpdateARPMap(ipv4.SrcIP, ethernet.SrcMAC)
 			if tcpLayer != nil {
 				tcp := tcpLayer.(*layers.TCP)
-				go ReadIPv4(packet, ethernet, ipv4, tcp, nil, iface, true)
+				ReadIPv4(packet, ethernet, ipv4, tcp, nil, iface, true)
 			}
 			if udpLayer != nil {
 				udp := udpLayer.(*layers.UDP)
