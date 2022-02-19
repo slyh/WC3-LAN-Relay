@@ -120,7 +120,7 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 			return
 		}
 
-		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, tcp)
+		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, tcp, gopacket.Payload(tcp.Payload))
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -134,7 +134,7 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 			return
 		}
 
-		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, udp)
+		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, udp, gopacket.Payload(udp.Payload))
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -235,7 +235,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 			return
 		}
 
-		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, tcp)
+		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, tcp, gopacket.Payload(tcp.Payload))
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -253,7 +253,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, nat bool) 
 			return
 		}
 
-		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, udp)
+		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, udp, gopacket.Payload(udp.Payload))
 		if err != nil {
 			fmt.Println(err)
 			return
