@@ -1,6 +1,6 @@
 # FAQ
 
-** TCP traffic not going through **
+**TCP traffic not going through**
 
 Ensure all the relay servers (including servers and clients) are not sending TCP RST packets.
 
@@ -13,7 +13,7 @@ iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST,ACK -j DROP
 ```
 
-** Wrong IP address is being used as source address **
+**Wrong IP address is being used as source address**
 
 The relay uses the first IP address it finds for NAT. You might want to disable IPv6 on that interface.
 
