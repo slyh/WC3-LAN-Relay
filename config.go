@@ -8,14 +8,15 @@ import (
 )
 
 type ConfigType struct {
-	Bind               string
-	Client             string
-	NATSourcePortStart int
-	NATSourcePortEnd   int
-	Role               int
-	Servers            []Server
-	WC3Interface       string
-	PCAPInterface      string
+	Bind                string
+	Client              string
+	NATSourcePortStart  int
+	NATSourcePortEnd    int
+	Role                int
+	Servers             []Server
+	WC3Interface        string
+	PCAPInterface       string
+	WC3InterfaceIPIndex int
 
 	// constants
 	ROLE_SERVER int

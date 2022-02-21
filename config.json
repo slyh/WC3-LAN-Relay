@@ -12,6 +12,7 @@
   ],
   "WC3Interface": "ens37",
   "PCAPInterface": "ens37",
+  "WC3InterfaceIPIndex": 0,
   "ROLE_SERVER": 0,
   "ROLE_CLIENT": 1
 }

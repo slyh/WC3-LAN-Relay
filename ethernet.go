@@ -40,8 +40,8 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 			return
 		}
 		if len(addrs) > 0 {
-			copy(rewriteAddr, addrs[0].(*net.IPNet).IP.To4())
-			copy(rewriteMask, addrs[0].(*net.IPNet).Mask)
+			copy(rewriteAddr, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).IP.To4())
+			copy(rewriteMask, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).Mask)
 		}
 
 		rewritePortCounter = uint16(config.NATSourcePortStart)
@@ -126,14 +126,16 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 			return
 		}
 
-		ipv4.DstIP = dstAddr.IP
+		if ipv4.DstIP.String() != "255.255.255.255" {
+			ipv4.DstIP = dstAddr.IP
 
-		if tcp != nil {
-			tcp.DstPort = layers.TCPPort(dstAddr.Port)
-		}
+			if tcp != nil {
+				tcp.DstPort = layers.TCPPort(dstAddr.Port)
+			}
 
-		if udp != nil {
-			udp.DstPort = layers.UDPPort(dstAddr.Port)
+			if udp != nil {
+				udp.DstPort = layers.UDPPort(dstAddr.Port)
+			}
 		}
 	}
 
@@ -333,11 +335,15 @@ func ReadARP(arp *layers.ARP) {
 
 func SendARP(handle *pcap.Handle, iface *net.Interface, dstIp net.IP) {
 	addrs, err := iface.Addrs()
-	if err != nil || len(addrs) == 0 {
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	srcIp := addrs[0].(*net.IPNet).IP
+	if len(addrs) == 0 {
+		fmt.Println("No IP assigned to the interface.")
+		return
+	}
+	srcIp := addrs[config.WC3InterfaceIPIndex].(*net.IPNet).IP
 
 	eth := layers.Ethernet{
 		SrcMAC:       iface.HardwareAddr,
