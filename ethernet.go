@@ -253,6 +253,10 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			newSrcAddr := GetRewroteSrcAddr(srcAddr)
 			ipv4.SrcIP = newSrcAddr.IP
 			udp.SrcPort = layers.UDPPort(newSrcAddr.Port)
+			// Rewrite game info from game hosts behind the client relay
+			if IsGameInfoPacket(udp.Payload, srcAddr.Port) {
+				RewriteGameInfoPacket(&udp.Payload, newSrcAddr.Port)
+			}
 		}
 
 		if ipv4.DstIP.String() != "255.255.255.255" {
