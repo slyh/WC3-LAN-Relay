@@ -5,7 +5,7 @@ func IsGameInfoPacket(payload []uint8, srcPort uint16) bool {
 		return false
 	}
 	if payload[0] == 0xf7 && payload[1] == 0x30 {
-		port := uint16(payload[len(payload)-1]<<8) | uint16(payload[len(payload)-2])
+		port := uint16(payload[len(payload)-1])<<8 | uint16(payload[len(payload)-2])
 		if port == srcPort {
 			return true
 		}
