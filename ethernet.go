@@ -107,26 +107,26 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 	buffer := gopacket.NewSerializeBuffer()
 
 	if config.Role == config.ROLE_SERVER {
-		dstPort := uint16(0)
-
-		if tcp != nil {
-			dstPort = uint16(tcp.DstPort)
-		}
-
-		if udp != nil {
-			dstPort = uint16(udp.DstPort)
-		}
-
-		rewriteMapLock.Lock()
-		dstAddr, ok := port2IpMap[dstPort]
-		rewriteMapLock.Unlock()
-
-		if !ok {
-			// fmt.Println("Dst Addr not found", dstPort)
-			return
-		}
-
 		if ipv4.DstIP.String() != "255.255.255.255" {
+			dstPort := uint16(0)
+
+			if tcp != nil {
+				dstPort = uint16(tcp.DstPort)
+			}
+
+			if udp != nil {
+				dstPort = uint16(udp.DstPort)
+			}
+
+			rewriteMapLock.Lock()
+			dstAddr, ok := port2IpMap[dstPort]
+			rewriteMapLock.Unlock()
+
+			if !ok {
+				// fmt.Println("Dst Addr not found", dstPort)
+				return
+			}
+
 			ipv4.DstIP = dstAddr.IP
 
 			if tcp != nil {
