@@ -405,6 +405,10 @@ func GetRewroteSrcAddr(addr Addr) (newAddr Addr) {
 		port2IpMap[rewritePortCounter] = addr
 		rewriteMap[addr.String()] = newAddr
 		rewritePortCounter++
+		if rewritePortCounter > uint16(config.NATSourcePortEnd) {
+			rewritePortCounter = uint16(config.NATSourcePortStart)
+			fmt.Printf("Source ports exhausted, reusing ports from %d.", rewritePortCounter)
+		}
 	}
 	rewriteMapLock.Unlock()
 	return
