@@ -1,0 +1,19 @@
+{
+  "Bind": "5.6.7.8:7112",
+  "Client": "",
+  "NATSourcePortStart": 10000,
+  "NATSourcePortEnd": 30000,
+  "Role": 1,
+  "Servers": [
+    {
+      "DisplayName": "NET01",
+      "Remote": "1.2.3.4:7112",
+      "LocalNetwork": "172.16.251.0/24"
+    }
+  ],
+  "WC3Interface": "tap0",
+  "PCAPInterface": "tap0",
+  "WC3InterfaceIPIndex": 0,
+  "ROLE_SERVER": 0,
+  "ROLE_CLIENT": 1
+}

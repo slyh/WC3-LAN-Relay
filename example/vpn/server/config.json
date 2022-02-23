@@ -1,0 +1,13 @@
+{
+  "Bind": "1.2.3.4:7112",
+  "Client": "5.6.7.8:7112",
+  "NATSourcePortStart": 10000,
+  "NATSourcePortEnd": 30000,
+  "Role": 0,
+  "Servers": [],
+  "WC3Interface": "eth1",
+  "PCAPInterface": "eth1",
+  "WC3InterfaceIPIndex": 0,
+  "ROLE_SERVER": 0,
+  "ROLE_CLIENT": 1
+}
