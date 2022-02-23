@@ -24,6 +24,7 @@ type ConfigType struct {
 }
 
 type Server struct {
+	DisplayName      string
 	Remote           string
 	LocalNetwork     string
 	LocalNetworkByte net.IPNet

@@ -232,6 +232,11 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 		for i, _ := range ipv4.SrcIP {
 			ipv4.SrcIP[i] = (ipv4.SrcIP[i] &^ localNetwork.Mask[i]) | (localNetwork.IP[i] & localNetwork.Mask[i])
 		}
+		if udp != nil {
+			if IsGameInfoPacket(udp.Payload, uint16(udp.SrcPort)) {
+				AddGameNamePrefix(&udp.Payload, config.Servers[serverIndex].DisplayName)
+			}
+		}
 	}
 
 	if config.Role == config.ROLE_SERVER {

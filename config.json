@@ -6,6 +6,7 @@
   "Role": 1,
   "Servers": [
     {
+      "DisplayName": "03",
       "Remote": "192.168.99.1:7112",
       "LocalNetwork": "10.200.3.0/24"
     }
