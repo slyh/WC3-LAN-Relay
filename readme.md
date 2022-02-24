@@ -1,12 +1,15 @@
-# Config
+WC3-LAN-Relay is a tool to relay Warcraft III traffics between networks.
 
-## Server
-```json
+## Config
+
+#### Server
+
+```json5
 {
   "Bind": "1.2.3.4:7112", // Where should the server listen to forwarded traffics
   "Client": "5.6.7.8:7112", // Where should the server forward traffics to
   "NATSourcePortStart": 10000, // UDP ports for NAT
-  "NATSourcePortEnd": 30000, // For example, UDP ports 10000-30000 will be used for NAT. Including port 3000.
+  "NATSourcePortEnd": 30000, // For example, UDP ports 10000-30000 will be used for NAT. Including port 30000.
   "Role": 0, // Server
   "Servers": [],
   "WC3Interface": "eth1", // Interface where Warcraft III traffics will be monitored
@@ -17,9 +20,9 @@
 }
 ```
 
-## Client
+#### Client
 
-```json
+```json5
 {
   "Bind": "5.6.7.8:7112", // Where should the client listen to forwarded traffics
   "Client": "", // For servers only, ignored
@@ -46,10 +49,11 @@
 }
 ```
 
-# Setup
+## Setup
 
-# Server
-```
+#### Server
+
+```bash
 # Drop TCP RST
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST,ACK -j DROP
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
@@ -58,7 +62,8 @@ go run ethernet.go relay.go config.go wc3.go
 ```
 
 # Client
-```
+
+```bash
 # Bind the network (AnyIP)
 ip -4 route add local 172.16.251.0/24 dev lo
 ip -4 route add local 172.16.252.0/24 dev lo
@@ -70,9 +75,9 @@ iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
 go run ethernet.go relay.go config.go wc3.go
 ```
 
-# FAQ
+## FAQ
 
-## TCP traffic not going through
+#### TCP traffics are not going through
 
 Ensure all the relay servers (including servers and clients) are not sending TCP RST packets.
 
@@ -80,11 +85,11 @@ On Windows, enable Windows Firewall.
 
 On Linux, you might find these iptables rules useful.
 
-```
+```bash
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST,ACK -j DROP
 ```
 
-## Wrong IP address is being used as source address
+#### Wrong IP is being used as the source address
 
-Try changing **WC3InterfaceIPIndex**.
+Try changing the `WC3InterfaceIPIndex` option.
