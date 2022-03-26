@@ -81,7 +81,7 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 			}
 			if udpLayer != nil {
 				udp := udpLayer.(*layers.UDP)
-				go ReadIPv4(packet, ethernet, ipv4, nil, udp, iface)
+				ReadIPv4(packet, ethernet, ipv4, nil, udp, iface)
 			}
 			continue
 		}
@@ -90,7 +90,7 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 
 		if arpLayer != nil {
 			arp := arpLayer.(*layers.ARP)
-			go ReadARP(arp)
+			ReadARP(arp)
 			continue
 		}
 
