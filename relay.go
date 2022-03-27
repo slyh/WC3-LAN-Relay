@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
+	"os/signal"
+	"time"
 
 	"github.com/google/gopacket/pcap"
 )
@@ -10,6 +13,8 @@ import (
 var config ConfigType
 var queueList []chan []uint8
 var outward = make(chan []uint8, 100)
+
+var packetCounter = 0
 
 func main() {
 	var err error
@@ -35,6 +40,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	defer conn.Close()
 
 	fmt.Println("Listening on", conn.LocalAddr())
 
@@ -62,8 +68,16 @@ func main() {
 		go OutwardHandler(conn, outward, config.Client)
 	}
 
-	wait := make(chan int)
-	<-wait
+	if config.Role == config.ROLE_SERVER {
+		go StatusUpdate()
+	}
+
+	sigterm := make(chan os.Signal, 1)
+	signal.Notify(sigterm, os.Interrupt)
+
+	<-sigterm
+	fmt.Println("Exiting...")
+	os.Exit(0)
 }
 
 func InwardHandler(conn net.PacketConn, handle *pcap.Handle, iface *net.Interface) {
@@ -88,6 +102,8 @@ func InwardHandler(conn net.PacketConn, handle *pcap.Handle, iface *net.Interfac
 		} else {
 			SendIPv4(handle, iface, payload, src2Index[src.String()])
 		}
+
+		packetCounter++
 	}
 }
 
@@ -105,5 +121,22 @@ func OutwardHandler(conn net.PacketConn, queue chan []uint8, remote string) {
 			fmt.Println(n, err)
 			return
 		}
+
+		packetCounter++
+	}
+}
+
+func StatusUpdate() {
+	ticker := time.NewTicker(60 * time.Second)
+	prevPacketCounter := 0
+	for {
+		<-ticker.C
+		fmt.Printf("Ports used: %d / %d, Processed packets: %d (%d ppm)\n",
+			rewritePortCounter-uint16(config.NATSourcePortStart),
+			config.NATSourcePortEnd-config.NATSourcePortStart,
+			packetCounter,
+			packetCounter-prevPacketCounter,
+		)
+		prevPacketCounter = packetCounter
 	}
 }

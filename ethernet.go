@@ -18,7 +18,7 @@ var arpMapLock sync.Mutex
 var port2IpMap = make(map[uint16]Addr)
 var rewriteMap = make(map[string]Addr)
 
-var rewriteAddr = []uint8{192, 168, 51, 49}
+var rewriteAddr = []uint8{192, 0, 2, 1}
 var rewriteMask = []uint8{255, 255, 255, 0}
 var rewritePortCounter = uint16(20000)
 var rewriteMapLock sync.Mutex
