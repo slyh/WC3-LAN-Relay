@@ -107,7 +107,7 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 	buffer := gopacket.NewSerializeBuffer()
 
 	if config.Role == config.ROLE_SERVER {
-		if ipv4.DstIP.String() != "255.255.255.255" {
+		if ipv4.DstIP.Equal(net.IPv4(255, 255, 255, 255)) == false {
 			dstPort := uint16(0)
 
 			if tcp != nil {
@@ -176,7 +176,10 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 	payload := buffer.Bytes()
 
 	if config.Role == config.ROLE_CLIENT {
-		if ipv4.DstIP.String() == "255.255.255.255" {
+		if ipv4.DstIP.Equal(net.IPv4(172, 16, 255, 255)) {
+			ipv4.DstIP = net.IPv4(255, 255, 255, 255)
+		}
+		if ipv4.DstIP.Equal(net.IPv4(255, 255, 255, 255)) {
 			for i, _ := range queueList {
 				queueList[i] <- payload
 			}
