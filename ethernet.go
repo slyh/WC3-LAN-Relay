@@ -48,6 +48,18 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 
 		fmt.Printf("NAT IP: %d.%d.%d.%d\n", rewriteAddr[0], rewriteAddr[1], rewriteAddr[2], rewriteAddr[3])
 		fmt.Printf("NAT Ports: %d - %d\n", rewritePortCounter, config.NATSourcePortEnd)
+
+		// Hardcode port 6112 for ghost
+		var ghostAddr = Addr{
+			IP:   []uint8{172, 16, 240, 10},
+			Port: 6112,
+		}
+		port2IpMap[6112] = ghostAddr
+
+		rewriteMap["172.16.240.10:6112"] = Addr{
+			IP:   rewriteAddr,
+			Port: uint16(6112),
+		}
 	}
 
 	src := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)

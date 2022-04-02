@@ -57,13 +57,6 @@ func main() {
 	}
 	defer handle.Close()
 
-	// Hardcode port 6112 for ghost
-	var ghostAddr = Addr{
-		IP:   []uint8{172, 16, 240, 10},
-		Port: 6112,
-	}
-	port2IpMap[6112] = ghostAddr
-
 	go ParsePacket(handle, iface)
 
 	go InwardHandler(conn, handle, iface)
