@@ -12,6 +12,46 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
+type MacMap struct {
+	macs map[uint32][6]uint8
+	lock sync.RWMutex
+}
+
+func (m MacMap) Get(ip net.IP) (mac [6]uint8) {
+	m.lock.RLock()
+	mac = m.macs[IPv4ToInt(ip)]
+	m.lock.RUnlock()
+	return
+}
+
+func (m MacMap) Set(ip net.IP, mac [6]uint8) {
+	m.lock.Lock()
+	m.macs[IPv4ToInt(ip)] = mac
+	m.lock.Unlock()
+}
+
+type AddrMap struct {
+	addrs map[uint64]Addr
+	lock  sync.RWMutex
+}
+
+func (m AddrMap) Get(addr Addr) (result Addr) {
+	m.lock.RLock()
+	result = m.addrs[AddrToInt(addr)]
+	m.lock.RUnlock()
+	return
+}
+
+func (m AddrMap) Set(addrKey Addr, valKey Addr) {
+	m.lock.Lock()
+	m.addrs[AddrToInt(addrKey)] = valKey
+	m.lock.Unlock()
+}
+
+var macMap MacMap
+
+// var rewriteMap AddrMap
+
 var arpMap = make(map[string][]uint8)
 var arpMapLock sync.Mutex
 
@@ -446,4 +486,14 @@ func GetRewroteDstAddr(addr Addr) (newAddr Addr) {
 	newAddr.IP[1] = 168
 	newAddr.IP[2] = 51
 	return
+}
+
+func IPv4ToInt(ip net.IP) uint32 {
+	ipv4 := ip.To4()
+	return uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
+}
+
+func AddrToInt(a Addr) uint64 {
+	ipv4 := a.IP.To4()
+	return uint64(a.Port)<<32 | uint64(ipv4[0])<<24 | uint64(ipv4[1])<<16 | uint64(ipv4[2])<<8 | uint64(ipv4[3])
 }
