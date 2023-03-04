@@ -13,18 +13,18 @@ import (
 )
 
 type MacMap struct {
-	macs map[uint32][6]uint8
+	macs map[uint32][]uint8
 	lock sync.RWMutex
 }
 
-func (m MacMap) Get(ip net.IP) (mac [6]uint8) {
+func (m MacMap) Get(ip net.IP) (mac []uint8, ok bool) {
 	m.lock.RLock()
-	mac = m.macs[IPv4ToInt(ip)]
+	mac, ok = m.macs[IPv4ToInt(ip)]
 	m.lock.RUnlock()
 	return
 }
 
-func (m MacMap) Set(ip net.IP, mac [6]uint8) {
+func (m MacMap) Set(ip net.IP, mac []uint8) {
 	m.lock.Lock()
 	m.macs[IPv4ToInt(ip)] = mac
 	m.lock.Unlock()
@@ -35,9 +35,9 @@ type AddrMap struct {
 	lock  sync.RWMutex
 }
 
-func (m AddrMap) Get(addr Addr) (result Addr) {
+func (m AddrMap) Get(addr Addr) (result Addr, ok bool) {
 	m.lock.RLock()
-	result = m.addrs[AddrToInt(addr)]
+	result, ok = m.addrs[AddrToInt(addr)]
 	m.lock.RUnlock()
 	return
 }
@@ -50,18 +50,18 @@ func (m AddrMap) Set(addrKey Addr, valKey Addr) {
 
 var macMap MacMap
 
-// var rewriteMap AddrMap
+var rewriteMap AddrMap
+var rewriteMapLock sync.Mutex
 
 var arpMap = make(map[string][]uint8)
 var arpMapLock sync.Mutex
 
 var port2IpMap = make(map[uint16]Addr)
-var rewriteMap = make(map[string]Addr)
+// var rewriteMap = make(map[string]Addr)
 
 var rewriteAddr = []uint8{192, 0, 2, 1}
 var rewriteMask = []uint8{255, 255, 255, 0}
 var rewritePortCounter = uint16(20000)
-var rewriteMapLock sync.Mutex
 
 type Addr struct {
 	IP   net.IP
@@ -96,10 +96,16 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		}
 		port2IpMap[6112] = ghostAddr
 
-		rewriteMap["172.16.240.10:6112"] = Addr{
+		rewriteMap.Set(ghostAddr,
+		Addr{
 			IP:   rewriteAddr,
 			Port: uint16(6112),
-		}
+		})
+		
+		// rewriteMap["172.16.240.10:6112"] = Addr{
+		// 	IP:   rewriteAddr,
+		// 	Port: uint16(6112),
+		// }
 	}
 
 	src := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
@@ -126,7 +132,8 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 
 		if ipv4Layer != nil {
 			ipv4 := ipv4Layer.(*layers.IPv4)
-			UpdateARPMap(ipv4.SrcIP, ethernet.SrcMAC)
+			// UpdateARPMap(ipv4.SrcIP, ethernet.SrcMAC)
+			macMap.Set(ipv4.SrcIP, ethernet.SrcMAC)
 			if tcpLayer != nil {
 				tcp := tcpLayer.(*layers.TCP)
 				ReadIPv4(packet, ethernet, ipv4, tcp, nil, iface)
@@ -329,14 +336,16 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 		}
 	}
 
-	dstMAC, ok := ReadARPMap(ipv4.DstIP.String())
+	dstMAC, ok := macMap.Get(ipv4.DstIP)
+	// dstMAC, ok := ReadARPMap(ipv4.DstIP.String())
 	if ipv4.DstIP.String() == "255.255.255.255" {
 		dstMAC = []uint8{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	} else if !ok {
 		fmt.Println("Sending ARP request", ipv4.DstIP.String())
 		SendARP(handle, iface, ipv4.DstIP)
 		time.Sleep(1 * time.Second)
-		dstMAC, ok = ReadARPMap(ipv4.DstIP.String())
+		// dstMAC, ok = ReadARPMap(ipv4.DstIP.String())
+		dstMAC, ok = macMap.Get(ipv4.DstIP)
 		if !ok {
 			fmt.Println("Dst MAC not found", ipv4.DstIP.String())
 			return
@@ -397,7 +406,8 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 }
 
 func ReadARP(arp *layers.ARP) {
-	UpdateARPMap(net.IP(arp.SourceProtAddress), net.HardwareAddr(arp.SourceHwAddress))
+	// UpdateARPMap(net.IP(arp.SourceProtAddress), net.HardwareAddr(arp.SourceHwAddress))
+	macMap.Set(net.IP(arp.SourceProtAddress), net.HardwareAddr(arp.SourceHwAddress))
 }
 
 func SendARP(handle *pcap.Handle, iface *net.Interface, dstIp net.IP) {
@@ -459,14 +469,16 @@ func UpdateARPMap(ip net.IP, mac []uint8) {
 
 func GetRewroteSrcAddr(addr Addr) (newAddr Addr) {
 	rewriteMapLock.Lock()
-	newAddr, ok := rewriteMap[addr.String()]
+	newAddr, ok := rewriteMap.Get(addr)
+	// newAddr, ok := rewriteMap[addr.String()]
 	if !ok {
 		newAddr = Addr{
 			IP:   rewriteAddr,
 			Port: uint16(rewritePortCounter),
 		}
 		port2IpMap[rewritePortCounter] = addr
-		rewriteMap[addr.String()] = newAddr
+		// rewriteMap[addr.String()] = newAddr
+		rewriteMap.Set(addr, newAddr)
 		rewritePortCounter++
 		if rewritePortCounter > uint16(config.NATSourcePortEnd) {
 			rewritePortCounter = uint16(config.NATSourcePortStart)
