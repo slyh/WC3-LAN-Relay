@@ -85,9 +85,7 @@ func SetPcapAddr(iface *net.Interface) {
 		return
 	}
 
-	if len(addrs) == 1 {
-		config.WC3InterfaceIPIndex = 0
-	} else if config.WC3InterfaceIPIndex < 0 {
+	if config.WC3InterfaceIPIndex < 0 {
 		for i, addr := range addrs {
 			ipv4 := addr.(*net.IPNet).IP.To4()
 			// Reject IPv6 address and link local addresses
@@ -103,7 +101,7 @@ func SetPcapAddr(iface *net.Interface) {
 	}
 
 	if reflect.DeepEqual(pcapAddr, []uint8{192, 0, 2, 1}) {
-		fmt.Printf("Failed to find interface IP or it's specifically set to 192.0.2.1\n")
+		fmt.Printf("Failed to find a suitable interface IP or it's specifically set to 192.0.2.1\n")
 	}
 
 	rewriteMap.addrs = make(map[uint64]Addr)
@@ -117,6 +115,7 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		rewritePortCounter = uint16(config.NATSourcePortStart)
 
 		fmt.Printf("NAT IP: %d.%d.%d.%d\n", rewriteAddr[0], rewriteAddr[1], rewriteAddr[2], rewriteAddr[3])
+		fmt.Printf("NAT Mask: %d.%d.%d.%d\n", rewriteMask[0], rewriteMask[1], rewriteMask[2], rewriteMask[3])
 		fmt.Printf("NAT Ports: %d - %d\n", rewritePortCounter, config.NATSourcePortEnd)
 
 		// Hardcode port 6112 for ghost
