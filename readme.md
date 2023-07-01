@@ -14,7 +14,7 @@ WC3-LAN-Relay is a tool to relay Warcraft III traffics between networks.
   "Servers": [],
   "WC3Interface": "eth1", // Interface where Warcraft III traffics will be monitored
   "PCAPInterface": "eth1", // Should be same as WC3Interface on Linux. On Windows, you have to find the interface's identifier
-  "WC3InterfaceIPIndex": 0, // Select which IP is used as the source IP on WC3Interface
+  "WC3InterfaceIPIndex": 0, // Select which IP is used as the source IP on WC3Interface, or set to -1 for auto detection
   "ROLE_SERVER": 0, // Constant
   "ROLE_CLIENT": 1 // Constant
 }
@@ -43,7 +43,7 @@ WC3-LAN-Relay is a tool to relay Warcraft III traffics between networks.
   ],
   "WC3Interface": "tap0", // Interface where Warcraft III traffics will be monitored
   "PCAPInterface": "tap0", // Should be same as WC3Interface on Linux. On Windows, you have to find the interface's identifier
-  "WC3InterfaceIPIndex": 0, // Select which IP is used as the source IP on WC3Interface
+  "WC3InterfaceIPIndex": 0, // Select which IP is used as the source IP on WC3Interface, or set to -1 for auto detection
   "ROLE_SERVER": 0, // Constant
   "ROLE_CLIENT": 1 // Constant
 }
