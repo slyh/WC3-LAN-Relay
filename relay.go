@@ -53,7 +53,17 @@ func main() {
 	// Must invoke this function before handling packets
 	SetPcapAddr(iface)
 
-	handle, err := pcap.OpenLive(config.PCAPInterface, 65535, false, pcap.BlockForever)
+	iHandle, err := pcap.NewInactiveHandle(config.PCAPInterface)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer iHandle.CleanUp()
+
+	iHandle.SetSnapLen(1500)
+	iHandle.SetImmediateMode(true)
+
+	handle, err := iHandle.Activate()
 	if err != nil {
 		fmt.Println(err)
 		return

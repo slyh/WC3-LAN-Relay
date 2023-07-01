@@ -31,6 +31,9 @@ type Server struct {
 }
 
 func ReadConfigFile(path string) (config ConfigType, err error) {
+	config.ROLE_SERVER = 0
+	config.ROLE_CLIENT = 1
+
 	var data []uint8
 	data, err = os.ReadFile(path)
 	if err != nil {

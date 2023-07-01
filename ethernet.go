@@ -173,14 +173,14 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 				ReadIPv4(packet, ethernet, ipv4, nil, udp, iface)
 			}
 			continue
-		}
+		} else {
+			arpLayer := packet.Layer(layers.LayerTypeARP)
 
-		arpLayer := packet.Layer(layers.LayerTypeARP)
-
-		if arpLayer != nil {
-			arp := arpLayer.(*layers.ARP)
-			ReadARP(arp)
-			continue
+			if arpLayer != nil {
+				arp := arpLayer.(*layers.ARP)
+				ReadARP(arp)
+				continue
+			}
 		}
 
 		fmt.Println("ParsePacket: No wanted layer")
@@ -201,9 +201,7 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 
 			if tcp != nil {
 				dstPort = uint16(tcp.DstPort)
-			}
-
-			if udp != nil {
+			} else if udp != nil {
 				dstPort = uint16(udp.DstPort)
 			}
 
@@ -220,15 +218,14 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 
 			if tcp != nil {
 				tcp.DstPort = layers.TCPPort(dstAddr.Port)
-			}
-
-			if udp != nil {
+			} else if udp != nil {
 				udp.DstPort = layers.UDPPort(dstAddr.Port)
 			}
 		}
 	}
 
 	if config.Role == config.ROLE_CLIENT {
+		// TODO: allow user to specify the broadcast address in config
 		if ipv4.DstIP.Equal(net.IPv4(172, 16, 255, 255)) {
 			ipv4.DstIP = net.IPv4(255, 255, 255, 255)
 		}
@@ -246,9 +243,7 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 			fmt.Println(err)
 			return
 		}
-	}
-
-	if udp != nil {
+	} else if udp != nil {
 		err := udp.SetNetworkLayerForChecksum(ipv4)
 		if err != nil {
 			fmt.Println(err)
@@ -261,12 +256,6 @@ func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IP
 			return
 		}
 	}
-
-	// err := gopacket.SerializePacket(buffer, serializeOptions, packet)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
 
 	payload := buffer.Bytes()
 
@@ -316,9 +305,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 
 	if tcpLayer != nil {
 		tcp = tcpLayer.(*layers.TCP)
-	}
-
-	if udpLayer != nil {
+	} else if udpLayer != nil {
 		udp = udpLayer.(*layers.UDP)
 	}
 
@@ -406,9 +393,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			fmt.Println(err)
 			return
 		}
-	}
-
-	if udp != nil {
+	} else if udp != nil {
 		err := udp.SetNetworkLayerForChecksum(ipv4)
 		if err != nil {
 			fmt.Println(err)
@@ -421,12 +406,6 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			return
 		}
 	}
-
-	// err := gopacket.SerializePacket(buffer, serializeOptions, packet)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
 
 	err := handle.WritePacketData(buffer.Bytes())
 	if err != nil {
