@@ -50,6 +50,9 @@ func main() {
 		return
 	}
 
+	// Must invoke this function before handling packets
+	SetPcapAddr(iface)
+
 	handle, err := pcap.OpenLive(config.PCAPInterface, 65535, false, pcap.BlockForever)
 	if err != nil {
 		fmt.Println(err)

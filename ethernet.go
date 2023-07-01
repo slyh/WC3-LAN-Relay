@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"reflect"
 	"sync"
 	"time"
 
@@ -57,7 +58,11 @@ var arpMap = make(map[string][]uint8)
 var arpMapLock sync.Mutex
 
 var port2IpMap = make(map[uint16]Addr)
+
 // var rewriteMap = make(map[string]Addr)
+
+var pcapAddr = []uint8{192, 0, 2, 1}
+var pcapMask = []uint8{255, 255, 255, 0}
 
 var rewriteAddr = []uint8{192, 0, 2, 1}
 var rewriteMask = []uint8{255, 255, 255, 0}
@@ -72,17 +77,42 @@ func (addr Addr) String() string {
 	return fmt.Sprintf("%d.%d.%d.%d:%d", addr.IP[0], addr.IP[1], addr.IP[2], addr.IP[3], addr.Port)
 }
 
+func SetPcapAddr(iface *net.Interface) {
+	addrs, err := iface.Addrs()
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if len(addrs) == 1 {
+		config.WC3InterfaceIPIndex = 0
+	} else if config.WC3InterfaceIPIndex < 0 {
+		for i, addr := range addrs {
+			ipv4 := addr.(*net.IPNet).IP.To4()
+			// Reject IPv6 address and link local addresses
+			if ipv4 != nil && !ipv4.IsLinkLocalUnicast() {
+				config.WC3InterfaceIPIndex = i
+			}
+		}
+	}
+
+	if len(addrs) > 0 && config.WC3InterfaceIPIndex >= 0 {
+		copy(pcapAddr, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).IP.To4())
+		copy(pcapMask, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).Mask)
+	}
+
+	if reflect.DeepEqual(pcapAddr, []uint8{192, 0, 2, 1}) {
+		fmt.Printf("Failed to find interface IP or it's specifically set to 192.0.2.1\n")
+	}
+
+	rewriteMap.addrs = make(map[uint64]Addr)
+}
+
 func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 	if config.Role == config.ROLE_SERVER {
-		addrs, err := iface.Addrs()
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		if len(addrs) > 0 {
-			copy(rewriteAddr, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).IP.To4())
-			copy(rewriteMask, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).Mask)
-		}
+		copy(rewriteAddr, pcapAddr)
+		copy(rewriteMask, pcapMask)
 
 		rewritePortCounter = uint16(config.NATSourcePortStart)
 
@@ -97,11 +127,11 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		port2IpMap[6112] = ghostAddr
 
 		rewriteMap.Set(ghostAddr,
-		Addr{
-			IP:   rewriteAddr,
-			Port: uint16(6112),
-		})
-		
+			Addr{
+				IP:   rewriteAddr,
+				Port: uint16(6112),
+			})
+
 		// rewriteMap["172.16.240.10:6112"] = Addr{
 		// 	IP:   rewriteAddr,
 		// 	Port: uint16(6112),
@@ -342,7 +372,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 		dstMAC = []uint8{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	} else if !ok {
 		fmt.Println("Sending ARP request", ipv4.DstIP.String())
-		SendARP(handle, iface, ipv4.DstIP)
+		SendARP(handle, iface, pcapAddr, ipv4.DstIP)
 		time.Sleep(1 * time.Second)
 		// dstMAC, ok = ReadARPMap(ipv4.DstIP.String())
 		dstMAC, ok = macMap.Get(ipv4.DstIP)
@@ -410,18 +440,7 @@ func ReadARP(arp *layers.ARP) {
 	macMap.Set(net.IP(arp.SourceProtAddress), net.HardwareAddr(arp.SourceHwAddress))
 }
 
-func SendARP(handle *pcap.Handle, iface *net.Interface, dstIp net.IP) {
-	addrs, err := iface.Addrs()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	if len(addrs) == 0 {
-		fmt.Println("No IP assigned to the interface.")
-		return
-	}
-	srcIp := addrs[config.WC3InterfaceIPIndex].(*net.IPNet).IP
-
+func SendARP(handle *pcap.Handle, iface *net.Interface, srcIp net.IP, dstIp net.IP) {
 	eth := layers.Ethernet{
 		SrcMAC:       iface.HardwareAddr,
 		DstMAC:       net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
@@ -447,7 +466,7 @@ func SendARP(handle *pcap.Handle, iface *net.Interface, dstIp net.IP) {
 	}
 
 	gopacket.SerializeLayers(buffer, opts, &eth, &arp)
-	err = handle.WritePacketData(buffer.Bytes())
+	err := handle.WritePacketData(buffer.Bytes())
 	if err != nil {
 		fmt.Println(err)
 		return
