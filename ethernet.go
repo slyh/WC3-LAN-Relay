@@ -105,6 +105,7 @@ func SetPcapAddr(iface *net.Interface) {
 	}
 
 	rewriteMap.addrs = make(map[uint64]Addr)
+	macMap.macs = make(map[uint32][]uint8)
 }
 
 func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
