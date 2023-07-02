@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"reflect"
 	"sync"
@@ -139,9 +140,18 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 	}
 
 	src := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
-	in := src.Packets()
+
 	for {
-		packet := <-in
+		packet, err := src.NextPacket()
+
+		if err == io.EOF {
+			fmt.Println("Received EOF")
+			break
+		} else if err != nil {
+			fmt.Println("Error:", err)
+			continue
+		}
+
 		ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
 
 		if ethernetLayer == nil {

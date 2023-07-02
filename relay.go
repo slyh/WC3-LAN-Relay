@@ -1,10 +1,12 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"time"
 
 	"github.com/google/gopacket/pcap"
@@ -16,8 +18,26 @@ var outward = make(chan []uint8, 100)
 
 var packetCounter = 0
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+
 func main() {
 	var err error
+
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			fmt.Println("could not create CPU profile: ", err)
+			return
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			fmt.Println("could not start CPU profile: ", err)
+			return
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	config, err = ReadConfigFile("config.json")
 	if err != nil {
 		fmt.Println("Failed to read config file. ", err)
@@ -99,7 +119,7 @@ func InwardHandler(conn net.PacketConn, handle *pcap.Handle, iface *net.Interfac
 		src2Index[server.Remote] = index
 	}
 
-	buffer := make([]byte, 65535)
+	buffer := make([]byte, 65536)
 	for {
 		n, src, err := conn.ReadFrom(buffer)
 
