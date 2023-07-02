@@ -110,6 +110,9 @@ func main() {
 
 	<-sigterm
 	fmt.Println("Exiting...")
+	if *cpuprofile != "" {
+		pprof.StopCPUProfile()
+	}
 	os.Exit(0)
 }
 
