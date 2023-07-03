@@ -159,7 +159,7 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		hasTcp = false
 		hasUdp = false
 
-		packetData, _, err := handle.ZeroCopyReadPacketData()
+		packetData, _, err := handle.ReadPacketData()
 
 		if err != nil {
 			fmt.Printf("Could not read packet data: %v\n", err)
@@ -167,11 +167,7 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		}
 
 		err = parser.DecodeLayers(packetData, &decoded)
-
-		if err != nil {
-			fmt.Printf("Could not decode layers: %v\n", err)
-			continue
-		}
+		// Skip error check here, no need to stop for unsupported layers
 
 		for _, layerType := range decoded {
 			switch layerType {
@@ -202,16 +198,17 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 			macMap.Set(ip4.SrcIP, eth.SrcMAC)
 			if hasTcp {
 				ReadIPv4(&eth, &ip4, &tcp, nil, iface)
+				continue
 			} else if hasUdp {
 				ReadIPv4(&eth, &ip4, nil, &udp, iface)
+				continue
 			}
-			continue
 		} else if hasArp {
 			ReadARP(&arp)
 			continue
 		}
 
-		fmt.Println("ParsePacket: No wanted layer")
+		// fmt.Println("ParsePacket: No wanted layer")
 	}
 }
 
