@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net"
 	"reflect"
 	"sync"
@@ -139,65 +138,84 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		// }
 	}
 
-	src := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
+	var eth layers.Ethernet
+	var arp layers.ARP
+	var ip4 layers.IPv4
+	var tcp layers.TCP
+	var udp layers.UDP
+	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &arp, &ip4, &tcp, &udp)
+	decoded := []gopacket.LayerType{}
+
+	var hasEth bool
+	var hasArp bool
+	var hasIp4 bool
+	var hasTcp bool
+	var hasUdp bool
 
 	for {
-		packet, err := src.NextPacket()
+		hasEth = false
+		hasArp = false
+		hasIp4 = false
+		hasTcp = false
+		hasUdp = false
 
-		if err == io.EOF {
-			fmt.Println("Received EOF")
-			break
-		} else if err != nil {
-			fmt.Println("Error:", err)
+		packetData, _, err := handle.ZeroCopyReadPacketData()
+
+		if err != nil {
+			fmt.Printf("Could not read packet data: %v\n", err)
 			continue
 		}
 
-		ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
+		err = parser.DecodeLayers(packetData, &decoded)
 
-		if ethernetLayer == nil {
+		if err != nil {
+			fmt.Printf("Could not decode layers: %v\n", err)
+			continue
+		}
+
+		for _, layerType := range decoded {
+			switch layerType {
+			case layers.LayerTypeEthernet:
+				hasEth = true
+			case layers.LayerTypeARP:
+				hasArp = true
+			case layers.LayerTypeIPv4:
+				hasIp4 = true
+			case layers.LayerTypeTCP:
+				hasTcp = true
+			case layers.LayerTypeUDP:
+				hasUdp = true
+			}
+		}
+
+		if !hasEth {
 			fmt.Println("ParsePacket: No ethernet layer")
 			continue
 		}
 
-		ethernet := ethernetLayer.(*layers.Ethernet)
-
-		if bytes.Equal(ethernet.SrcMAC, iface.HardwareAddr) {
+		if bytes.Equal(eth.SrcMAC, iface.HardwareAddr) {
 			// Ignore packets from myself
 			continue
 		}
 
-		ipv4Layer := packet.Layer(layers.LayerTypeIPv4)
-		tcpLayer := packet.Layer(layers.LayerTypeTCP)
-		udpLayer := packet.Layer(layers.LayerTypeUDP)
-
-		if ipv4Layer != nil {
-			ipv4 := ipv4Layer.(*layers.IPv4)
-			// UpdateARPMap(ipv4.SrcIP, ethernet.SrcMAC)
-			macMap.Set(ipv4.SrcIP, ethernet.SrcMAC)
-			if tcpLayer != nil {
-				tcp := tcpLayer.(*layers.TCP)
-				ReadIPv4(packet, ethernet, ipv4, tcp, nil, iface)
-			}
-			if udpLayer != nil {
-				udp := udpLayer.(*layers.UDP)
-				ReadIPv4(packet, ethernet, ipv4, nil, udp, iface)
+		if hasIp4 {
+			macMap.Set(ip4.SrcIP, eth.SrcMAC)
+			if hasTcp {
+				ReadIPv4(&eth, &ip4, &tcp, nil, iface)
+			} else if hasUdp {
+				ReadIPv4(&eth, &ip4, nil, &udp, iface)
 			}
 			continue
-		} else {
-			arpLayer := packet.Layer(layers.LayerTypeARP)
-
-			if arpLayer != nil {
-				arp := arpLayer.(*layers.ARP)
-				ReadARP(arp)
-				continue
-			}
+		} else if hasArp {
+			ReadARP(&arp)
+			continue
 		}
 
 		fmt.Println("ParsePacket: No wanted layer")
 	}
 }
 
-func ReadIPv4(packet gopacket.Packet, ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp *layers.UDP, iface *net.Interface) {
+func ReadIPv4(ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp *layers.UDP, iface *net.Interface) {
 	serializeOptions := gopacket.SerializeOptions{
 		FixLengths:       true,
 		ComputeChecksums: true,
