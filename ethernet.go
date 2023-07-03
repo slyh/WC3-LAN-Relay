@@ -59,12 +59,8 @@ var arpMapLock sync.Mutex
 
 var port2IpMap = make(map[uint16]Addr)
 
-// var rewriteMap = make(map[string]Addr)
-
-var pcapAddr = []uint8{192, 0, 2, 1}
-var pcapMask = []uint8{255, 255, 255, 0}
-
 var rewriteAddr = []uint8{192, 0, 2, 1}
+var rewriteBroadcast = []uint8{192, 0, 2, 255}
 var rewriteMask = []uint8{255, 255, 255, 0}
 var rewritePortCounter = uint16(20000)
 
@@ -96,11 +92,15 @@ func SetPcapAddr(iface *net.Interface) {
 	}
 
 	if len(addrs) > 0 && config.WC3InterfaceIPIndex >= 0 {
-		copy(pcapAddr, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).IP.To4())
-		copy(pcapMask, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).Mask)
+		copy(rewriteAddr, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).IP.To4())
+		copy(rewriteMask, addrs[config.WC3InterfaceIPIndex].(*net.IPNet).Mask)
 	}
 
-	if reflect.DeepEqual(pcapAddr, []uint8{192, 0, 2, 1}) {
+	for i, _ := range rewriteAddr {
+		rewriteBroadcast[i] = rewriteAddr[i] | ^rewriteMask[i]
+	}
+
+	if reflect.DeepEqual(rewriteAddr, []uint8{192, 0, 2, 1}) {
 		fmt.Printf("Failed to find a suitable interface IP or it's specifically set to 192.0.2.1\n")
 	}
 
@@ -110,13 +110,11 @@ func SetPcapAddr(iface *net.Interface) {
 
 func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 	if config.Role == config.ROLE_SERVER {
-		copy(rewriteAddr, pcapAddr)
-		copy(rewriteMask, pcapMask)
-
 		rewritePortCounter = uint16(config.NATSourcePortStart)
 
 		fmt.Printf("NAT IP: %d.%d.%d.%d\n", rewriteAddr[0], rewriteAddr[1], rewriteAddr[2], rewriteAddr[3])
 		fmt.Printf("NAT Mask: %d.%d.%d.%d\n", rewriteMask[0], rewriteMask[1], rewriteMask[2], rewriteMask[3])
+		fmt.Printf("NAT Broadcast: %d.%d.%d.%d\n", rewriteBroadcast[0], rewriteBroadcast[1], rewriteBroadcast[2], rewriteBroadcast[3])
 		fmt.Printf("NAT Ports: %d - %d\n", rewritePortCounter, config.NATSourcePortEnd)
 
 		// Hardcode port 6112 for ghost
@@ -131,11 +129,6 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 				IP:   rewriteAddr,
 				Port: uint16(6112),
 			})
-
-		// rewriteMap["172.16.240.10:6112"] = Addr{
-		// 	IP:   rewriteAddr,
-		// 	Port: uint16(6112),
-		// }
 	}
 
 	var eth layers.Ethernet
@@ -198,14 +191,11 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 			macMap.Set(ip4.SrcIP, eth.SrcMAC)
 			if hasTcp {
 				ReadIPv4(&eth, &ip4, &tcp, nil, iface)
-				continue
 			} else if hasUdp {
 				ReadIPv4(&eth, &ip4, nil, &udp, iface)
-				continue
 			}
 		} else if hasArp {
 			ReadARP(&arp)
-			continue
 		}
 
 		// fmt.Println("ParsePacket: No wanted layer")
@@ -221,7 +211,7 @@ func ReadIPv4(ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp
 	buffer := gopacket.NewSerializeBuffer()
 
 	if config.Role == config.ROLE_SERVER {
-		if ipv4.DstIP.Equal(net.IPv4(255, 255, 255, 255)) == false {
+		if !ipv4.DstIP.Equal(net.IPv4(255, 255, 255, 255)) {
 			dstPort := uint16(0)
 
 			if tcp != nil {
@@ -250,8 +240,7 @@ func ReadIPv4(ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp
 	}
 
 	if config.Role == config.ROLE_CLIENT {
-		// TODO: allow user to specify the broadcast address in config
-		if ipv4.DstIP.Equal(net.IPv4(172, 16, 255, 255)) {
+		if ipv4.DstIP.Equal(rewriteBroadcast) {
 			ipv4.DstIP = net.IPv4(255, 255, 255, 255)
 		}
 	}
@@ -311,35 +300,46 @@ func ReadIPv4(ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp
 }
 
 func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverIndex int) {
-	decodeOptions := gopacket.DecodeOptions{}
-	packet := gopacket.NewPacket(raw, layers.LayerTypeEthernet, decodeOptions)
+	var eth layers.Ethernet
+	var ip4 layers.IPv4
+	var tcp layers.TCP
+	var udp layers.UDP
 
-	ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
-	ipv4Layer := packet.Layer(layers.LayerTypeIPv4)
-	tcpLayer := packet.Layer(layers.LayerTypeTCP)
-	udpLayer := packet.Layer(layers.LayerTypeUDP)
+	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &tcp, &udp)
+	decoded := []gopacket.LayerType{}
 
-	if ethernetLayer == nil || ipv4Layer == nil || (tcpLayer == nil && udpLayer == nil) {
+	var hasEth = false
+	var hasIp4 = false
+	var hasTcp = false
+	var hasUdp = false
+
+	err := parser.DecodeLayers(raw, &decoded)
+	// Skip error check here, no need to stop for unsupported layers
+
+	for _, layerType := range decoded {
+		switch layerType {
+		case layers.LayerTypeEthernet:
+			hasEth = true
+		case layers.LayerTypeIPv4:
+			hasIp4 = true
+		case layers.LayerTypeTCP:
+			hasTcp = true
+		case layers.LayerTypeUDP:
+			hasUdp = true
+		}
+	}
+
+	if !hasEth || !hasIp4 || (!hasTcp && !hasUdp) {
 		fmt.Println("Unknown layer")
 		return
 	}
 
-	ipv4 := ipv4Layer.(*layers.IPv4)
-	var tcp *layers.TCP = nil
-	var udp *layers.UDP = nil
-
-	if tcpLayer != nil {
-		tcp = tcpLayer.(*layers.TCP)
-	} else if udpLayer != nil {
-		udp = udpLayer.(*layers.UDP)
-	}
-
 	if config.Role == config.ROLE_CLIENT {
 		localNetwork := config.Servers[serverIndex].LocalNetworkByte
-		for i, _ := range ipv4.SrcIP {
-			ipv4.SrcIP[i] = (ipv4.SrcIP[i] &^ localNetwork.Mask[i]) | (localNetwork.IP[i] & localNetwork.Mask[i])
+		for i, _ := range ip4.SrcIP {
+			ip4.SrcIP[i] = (ip4.SrcIP[i] &^ localNetwork.Mask[i]) | (localNetwork.IP[i] & localNetwork.Mask[i])
 		}
-		if udp != nil {
+		if hasUdp {
 			if IsGameInfoPacket(udp.Payload, uint16(udp.SrcPort)) {
 				AddGameNamePrefix(&udp.Payload, config.Servers[serverIndex].DisplayName)
 			}
@@ -347,23 +347,21 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 	}
 
 	if config.Role == config.ROLE_SERVER {
-		if tcp != nil {
+		if hasTcp {
 			srcAddr := Addr{
-				IP:   ipv4.SrcIP,
+				IP:   ip4.SrcIP,
 				Port: uint16(tcp.SrcPort),
 			}
 			newSrcAddr := GetRewroteSrcAddr(srcAddr)
-			ipv4.SrcIP = newSrcAddr.IP
+			ip4.SrcIP = newSrcAddr.IP
 			tcp.SrcPort = layers.TCPPort(newSrcAddr.Port)
-		}
-
-		if udp != nil {
+		} else if hasUdp {
 			srcAddr := Addr{
-				IP:   ipv4.SrcIP,
+				IP:   ip4.SrcIP,
 				Port: uint16(udp.SrcPort),
 			}
 			newSrcAddr := GetRewroteSrcAddr(srcAddr)
-			ipv4.SrcIP = newSrcAddr.IP
+			ip4.SrcIP = newSrcAddr.IP
 			udp.SrcPort = layers.UDPPort(newSrcAddr.Port)
 			// Rewrite game info from game hosts behind the client relay
 			if IsGameInfoPacket(udp.Payload, srcAddr.Port) {
@@ -371,33 +369,31 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			}
 		}
 
-		if ipv4.DstIP.String() != "255.255.255.255" {
-			for i, _ := range ipv4.DstIP {
-				ipv4.DstIP[i] = (ipv4.DstIP[i] &^ rewriteMask[i]) | (rewriteAddr[i] & rewriteMask[i])
+		if !ip4.DstIP.Equal(net.IPv4(255, 255, 255, 255)) {
+			for i, _ := range ip4.DstIP {
+				ip4.DstIP[i] = (ip4.DstIP[i] &^ rewriteMask[i]) | (rewriteAddr[i] & rewriteMask[i])
 			}
 		}
 	}
 
-	dstMAC, ok := macMap.Get(ipv4.DstIP)
-	// dstMAC, ok := ReadARPMap(ipv4.DstIP.String())
-	if ipv4.DstIP.String() == "255.255.255.255" {
+	dstMAC, ok := macMap.Get(ip4.DstIP)
+
+	if ip4.DstIP.Equal(net.IPv4(255, 255, 255, 255)) {
 		dstMAC = []uint8{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	} else if !ok {
-		fmt.Println("Sending ARP request", ipv4.DstIP.String())
-		SendARP(handle, iface, pcapAddr, ipv4.DstIP)
+		fmt.Println("Sending ARP request", ip4.DstIP.String())
+		SendARP(handle, iface, rewriteAddr, ip4.DstIP)
 		time.Sleep(1 * time.Second)
-		// dstMAC, ok = ReadARPMap(ipv4.DstIP.String())
-		dstMAC, ok = macMap.Get(ipv4.DstIP)
+		dstMAC, ok = macMap.Get(ip4.DstIP)
 		if !ok {
-			fmt.Println("Dst MAC not found", ipv4.DstIP.String())
+			fmt.Println("Dst MAC not found", ip4.DstIP.String())
 			return
 		}
 	}
 
-	ethernet := ethernetLayer.(*layers.Ethernet)
-	ethernet.SrcMAC = iface.HardwareAddr
-	ethernet.DstMAC = dstMAC
-	ethernet.EthernetType = layers.EthernetTypeIPv4
+	eth.SrcMAC = iface.HardwareAddr
+	eth.DstMAC = dstMAC
+	eth.EthernetType = layers.EthernetTypeIPv4
 
 	serializeOptions := gopacket.SerializeOptions{
 		FixLengths:       true,
@@ -406,33 +402,33 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 
 	buffer := gopacket.NewSerializeBuffer()
 
-	if tcp != nil {
-		err := tcp.SetNetworkLayerForChecksum(ipv4)
+	if hasTcp {
+		err := tcp.SetNetworkLayerForChecksum(&ip4)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, tcp, gopacket.Payload(tcp.Payload))
+		err = gopacket.SerializeLayers(buffer, serializeOptions, &eth, &ip4, &tcp, gopacket.Payload(tcp.Payload))
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-	} else if udp != nil {
-		err := udp.SetNetworkLayerForChecksum(ipv4)
+	} else if hasUdp {
+		err := udp.SetNetworkLayerForChecksum(&ip4)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		err = gopacket.SerializeLayers(buffer, serializeOptions, ethernet, ipv4, udp, gopacket.Payload(udp.Payload))
+		err = gopacket.SerializeLayers(buffer, serializeOptions, &eth, &ip4, &udp, gopacket.Payload(udp.Payload))
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 	}
 
-	err := handle.WritePacketData(buffer.Bytes())
+	err = handle.WritePacketData(buffer.Bytes())
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -440,7 +436,6 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 }
 
 func ReadARP(arp *layers.ARP) {
-	// UpdateARPMap(net.IP(arp.SourceProtAddress), net.HardwareAddr(arp.SourceHwAddress))
 	macMap.Set(net.IP(arp.SourceProtAddress), net.HardwareAddr(arp.SourceHwAddress))
 }
 
@@ -509,17 +504,6 @@ func GetRewroteSrcAddr(addr Addr) (newAddr Addr) {
 		}
 	}
 	rewriteMapLock.Unlock()
-	return
-}
-
-func GetRewroteDstAddr(addr Addr) (newAddr Addr) {
-	newAddr = Addr{
-		IP:   addr.IP,
-		Port: addr.Port,
-	}
-	newAddr.IP[0] = 192
-	newAddr.IP[1] = 168
-	newAddr.IP[2] = 51
 	return
 }
 

@@ -80,7 +80,7 @@ func main() {
 	}
 	defer iHandle.CleanUp()
 
-	iHandle.SetSnapLen(1500)
+	iHandle.SetSnapLen(65536)
 	iHandle.SetImmediateMode(true)
 
 	handle, err := iHandle.Activate()
