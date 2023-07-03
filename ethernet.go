@@ -20,9 +20,9 @@ type MacMap struct {
 }
 
 func (m MacMap) Get(ip net.IP) (mac []uint8, ok bool) {
-	m.lock.RLock()
+	m.lock.Lock()
 	mac, ok = m.macs[IPv4ToInt(ip)]
-	m.lock.RUnlock()
+	m.lock.Unlock()
 	return
 }
 
@@ -38,9 +38,9 @@ type AddrMap struct {
 }
 
 func (m AddrMap) Get(addr Addr) (result Addr, ok bool) {
-	m.lock.RLock()
+	m.lock.Lock()
 	result, ok = m.addrs[AddrToInt(addr)]
-	m.lock.RUnlock()
+	m.lock.Unlock()
 	return
 }
 
