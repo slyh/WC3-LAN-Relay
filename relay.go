@@ -134,9 +134,9 @@ func InwardHandler(conn net.PacketConn, handle *pcap.Handle, iface *net.Interfac
 		payload := buffer[:n]
 
 		if config.Role == config.ROLE_SERVER {
-			SendIPv4(handle, iface, payload, 0)
+			SendIPv4(handle, iface, &payload, 0)
 		} else {
-			SendIPv4(handle, iface, payload, src2Index[src.String()])
+			SendIPv4(handle, iface, &payload, src2Index[src.String()])
 		}
 
 		packetCounter++

@@ -299,7 +299,7 @@ func ReadIPv4(ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp
 	// log.Printf("\n<-", string(payload))
 }
 
-func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverIndex int) {
+func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw *[]uint8, serverIndex int) {
 	var eth layers.Ethernet
 	var ip4 layers.IPv4
 	var tcp layers.TCP
@@ -313,7 +313,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 	var hasTcp = false
 	var hasUdp = false
 
-	err := parser.DecodeLayers(raw, &decoded)
+	err := parser.DecodeLayers(*raw, &decoded)
 	// Skip error check here, no need to stop for unsupported layers
 
 	for _, layerType := range decoded {
@@ -340,8 +340,8 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			ip4.SrcIP[i] = (ip4.SrcIP[i] &^ localNetwork.Mask[i]) | (localNetwork.IP[i] & localNetwork.Mask[i])
 		}
 		if hasUdp {
-			if IsGameInfoPacket(udp.Payload, uint16(udp.SrcPort)) {
-				AddGameNamePrefix(&udp.Payload, config.Servers[serverIndex].DisplayName)
+			if IsGameInfoPacket(&udp.Payload, uint16(udp.SrcPort)) {
+				AddGameNamePrefix(&udp.Payload, &config.Servers[serverIndex].DisplayName)
 			}
 		}
 	}
@@ -364,7 +364,7 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw []uint8, serverInde
 			ip4.SrcIP = newSrcAddr.IP
 			udp.SrcPort = layers.UDPPort(newSrcAddr.Port)
 			// Rewrite game info from game hosts behind the client relay
-			if IsGameInfoPacket(udp.Payload, srcAddr.Port) {
+			if IsGameInfoPacket(&udp.Payload, srcAddr.Port) {
 				RewriteGameInfoPacket(&udp.Payload, newSrcAddr.Port)
 			}
 		}
