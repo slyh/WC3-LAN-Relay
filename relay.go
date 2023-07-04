@@ -19,6 +19,7 @@ var outward = make(chan []uint8, 100)
 var packetCounter = 0
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+var listIfs = flag.Bool("list-ifs", false, "list all pcap interfaces")
 
 func main() {
 	var err error
@@ -36,6 +37,19 @@ func main() {
 			return
 		}
 		defer pprof.StopCPUProfile()
+	}
+
+	if *listIfs {
+		ifs, err := pcap.FindAllDevs()
+		if err != nil {
+			fmt.Println("Failed to list interfaces: ", err)
+			return
+		}
+		fmt.Printf("PCAP interfaces:\n")
+		for _, e := range ifs {
+			fmt.Printf("%s %s %s\n", e.Name, e.Description, e.Addresses)
+		}
+		return
 	}
 
 	config, err = ReadConfigFile("config.json")
