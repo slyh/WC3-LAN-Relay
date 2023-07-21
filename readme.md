@@ -1,4 +1,4 @@
-WC3-LAN-Relay is a tool to relay Warcraft III traffics between networks.
+WC3-LAN-Relay is a tool to relay Warcraft III traffic between networks.
 
 ## Config
 
@@ -6,13 +6,13 @@ WC3-LAN-Relay is a tool to relay Warcraft III traffics between networks.
 
 ```json5
 {
-  "Bind": "1.2.3.4:7112", // Where should the server listen to forwarded traffics
-  "Client": "5.6.7.8:7112", // Where should the server forward traffics to
+  "Bind": "1.2.3.4:7112", // Where should the server listen to forwarded traffic
+  "Client": "5.6.7.8:7112", // Where should the server forward traffic to
   "NATSourcePortStart": 10000, // UDP ports for NAT
   "NATSourcePortEnd": 30000, // For example, UDP ports 10000-30000 will be used for NAT. Including port 30000.
   "Role": 0, // Server
   "Servers": [],
-  "WC3Interface": "eth1", // Interface where Warcraft III traffics will be monitored
+  "WC3Interface": "eth1", // Interface where Warcraft III traffic will be monitored
   "PCAPInterface": "eth1", // Should be same as WC3Interface on Linux. On Windows, you have to find the interface's identifier
   "WC3InterfaceIPIndex": 0 // Select which IP is used as the source IP on WC3Interface, or set to -1 for auto detection
 }
@@ -22,7 +22,7 @@ WC3-LAN-Relay is a tool to relay Warcraft III traffics between networks.
 
 ```json5
 {
-  "Bind": "5.6.7.8:7112", // Where should the client listen to forwarded traffics
+  "Bind": "5.6.7.8:7112", // Where should the client listen to forwarded traffic
   "Client": "", // For servers only, ignored
   "NATSourcePortStart": 10000, // For servers only, ignored
   "NATSourcePortEnd": 30000, // For servers only, ignored
@@ -39,7 +39,7 @@ WC3-LAN-Relay is a tool to relay Warcraft III traffics between networks.
       "LocalNetwork": "172.16.252.0/24"
     }
   ],
-  "WC3Interface": "tap0", // Interface where Warcraft III traffics will be monitored
+  "WC3Interface": "tap0", // Interface where Warcraft III traffic will be monitored
   "PCAPInterface": "tap0", // Should be same as WC3Interface on Linux. On Windows, you have to find the interface's identifier
   "WC3InterfaceIPIndex": 0 // Select which IP is used as the source IP on WC3Interface, or set to -1 for auto detection
 }
@@ -54,10 +54,10 @@ WC3-LAN-Relay is a tool to relay Warcraft III traffics between networks.
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST,ACK -j DROP
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
 
-go run ethernet.go relay.go config.go wc3.go
+go run .
 ```
 
-# Client
+#### Client
 
 ```bash
 # Bind the network (AnyIP)
@@ -68,12 +68,12 @@ ip -4 route add local 172.16.252.0/24 dev lo
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST,ACK -j DROP
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
 
-go run ethernet.go relay.go config.go wc3.go
+go run .
 ```
 
 ## FAQ
 
-#### TCP traffics are not going through
+#### TCP traffic is not going through
 
 Ensure all the relay servers (including servers and clients) are not sending TCP RST packets.
 
@@ -86,6 +86,10 @@ iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
 iptables -I OUTPUT -p tcp --tcp-flags ALL RST,ACK -j DROP
 ```
 
-#### Wrong IP is being used as the source address
+#### Wrong IP being used as the source address
 
 Try changing the `WC3InterfaceIPIndex` option.
+
+#### Error PacketSendPacket
+
+Turn off all fragmentation offload features. On Linux, you could use `ethtool`.
