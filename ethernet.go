@@ -178,7 +178,9 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		}
 
 		if !hasEth {
-			fmt.Println("ParsePacket: No ethernet layer")
+			if config.Verbose {
+				fmt.Println("ParsePacket: No ethernet layer")
+			}
 			continue
 		}
 
@@ -287,7 +289,9 @@ func ReadIPv4(ethernet *layers.Ethernet, ipv4 *layers.IPv4, tcp *layers.TCP, udp
 			}
 
 			if serverIndex == -1 {
-				fmt.Println("No suitable remote:", ipv4.DstIP)
+				if config.Verbose {
+					fmt.Println("No suitable remote:", ipv4.DstIP)
+				}
 			} else {
 				queueList[serverIndex] <- payload
 			}
@@ -381,12 +385,16 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw *[]uint8, serverInd
 	if ip4.DstIP.Equal(net.IPv4(255, 255, 255, 255)) {
 		dstMAC = []uint8{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	} else if !ok {
-		fmt.Println("Sending ARP request", ip4.DstIP.String())
+		if config.Verbose {
+			fmt.Println("Sending ARP request", ip4.DstIP.String())
+		}
 		SendARP(handle, iface, rewriteAddr, ip4.DstIP)
 		time.Sleep(1 * time.Second)
 		dstMAC, ok = macMap.Get(ip4.DstIP)
 		if !ok {
-			fmt.Println("Dst MAC not found", ip4.DstIP.String())
+			if config.Verbose {
+				fmt.Println("Dst MAC not found", ip4.DstIP.String())
+			}
 			return
 		}
 	}

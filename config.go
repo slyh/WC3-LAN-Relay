@@ -14,6 +14,7 @@ type ConfigType struct {
 	NATSourcePortEnd    int
 	Role                int
 	Servers             []Server
+	Verbose             bool
 	WC3Interface        string
 	PCAPInterface       string
 	WC3InterfaceIPIndex int

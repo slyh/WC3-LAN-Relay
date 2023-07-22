@@ -11,6 +11,7 @@
       "LocalNetwork": "10.200.3.0/24"
     }
   ],
+  "Verbose": false,
   "WC3Interface": "ens37",
   "PCAPInterface": "ens37",
   "WC3InterfaceIPIndex": -1
