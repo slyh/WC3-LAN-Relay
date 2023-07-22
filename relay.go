@@ -99,7 +99,7 @@ func main() {
 	iHandle.SetSnapLen(MTU + 22)
 	iHandle.SetImmediateMode(false)
 	iHandle.SetBufferSize(256 * (MTU + 22))
-	iHandle.SetTimeout(time.Millisecond * 20)
+	iHandle.SetTimeout(time.Millisecond * 20 * -1) // Set it to negative so pcap won't complain timeout expired
 
 	handle, err := iHandle.Activate()
 	if err != nil {
