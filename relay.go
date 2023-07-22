@@ -12,6 +12,8 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
+const MTU = 1500
+
 var config ConfigType
 var queueList []chan []uint8
 var outward = make(chan []uint8, 100)
@@ -94,8 +96,10 @@ func main() {
 	}
 	defer iHandle.CleanUp()
 
-	iHandle.SetSnapLen(65536)
-	iHandle.SetImmediateMode(true)
+	iHandle.SetSnapLen(MTU + 22)
+	iHandle.SetImmediateMode(false)
+	iHandle.SetBufferSize(256 * (MTU + 22))
+	iHandle.SetTimeout(time.Millisecond * 20)
 
 	handle, err := iHandle.Activate()
 	if err != nil {
@@ -136,7 +140,7 @@ func InwardHandler(conn net.PacketConn, handle *pcap.Handle, iface *net.Interfac
 		src2Index[server.Remote] = index
 	}
 
-	buffer := make([]byte, 65536)
+	buffer := make([]byte, MTU)
 	for {
 		n, src, err := conn.ReadFrom(buffer)
 
