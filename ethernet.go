@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"net"
-	"reflect"
 	"sync"
 	"time"
 
@@ -100,7 +99,7 @@ func SetPcapAddr(iface *net.Interface) {
 		rewriteBroadcast[i] = rewriteAddr[i] | ^rewriteMask[i]
 	}
 
-	if reflect.DeepEqual(rewriteAddr, []uint8{192, 0, 2, 1}) {
+	if bytes.Equal(rewriteAddr, []uint8{192, 0, 2, 1}) {
 		fmt.Printf("Failed to find a suitable interface IP or it's specifically set to 192.0.2.1\n")
 	}
 
@@ -118,17 +117,17 @@ func ParsePacket(handle *pcap.Handle, iface *net.Interface) {
 		fmt.Printf("NAT Ports: %d - %d\n", rewritePortCounter, config.NATSourcePortEnd)
 
 		// Hardcode port 6112 for ghost
-		var ghostAddr = Addr{
-			IP:   []uint8{172, 16, 240, 10},
-			Port: 6112,
-		}
-		port2IpMap[6112] = ghostAddr
+		// var ghostAddr = Addr{
+		// 	IP:   []uint8{172, 16, 240, 10},
+		// 	Port: 6112,
+		// }
+		// port2IpMap[6112] = ghostAddr
 
-		rewriteMap.Set(ghostAddr,
-			Addr{
-				IP:   rewriteAddr,
-				Port: uint16(6112),
-			})
+		// rewriteMap.Set(ghostAddr,
+		// 	Addr{
+		// 		IP:   rewriteAddr,
+		// 		Port: uint16(6112),
+		// 	})
 	}
 
 	var eth layers.Ethernet
@@ -351,6 +350,15 @@ func SendIPv4(handle *pcap.Handle, iface *net.Interface, raw *[]uint8, serverInd
 	}
 
 	if config.Role == config.ROLE_SERVER {
+		// Skip NAT for specific source MAC
+		if bytes.Equal(eth.SrcMAC, []byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab}) {
+			err = handle.WritePacketData(*raw)
+			if err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+
 		if hasTcp {
 			srcAddr := Addr{
 				IP:   ip4.SrcIP,
